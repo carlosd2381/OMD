@@ -1,0 +1,308 @@
+import React, { useState } from 'react';
+import { Save, Mail, MessageSquare, Bell, Facebook, Instagram, Server, User, Smartphone } from 'lucide-react';
+
+export default function EmailMessagingSettings() {
+  const [activeTab, setActiveTab] = useState('email');
+  
+  // Mock state for form fields
+  const [smtpSettings, setSmtpSettings] = useState({
+    host: 'smtp.example.com',
+    port: '587',
+    username: '',
+    password: '',
+    secure: false,
+    fromName: 'My Company',
+    replyTo: 'support@example.com'
+  });
+
+  const [signature, setSignature] = useState('Best regards,\n\nThe Team');
+  
+  const [notifications, setNotifications] = useState({
+    newLead: { email: true, inApp: true, sms: false, push: false },
+    contractSigned: { email: true, inApp: true, sms: true, push: true },
+    invoicePaid: { email: true, inApp: true, sms: false, push: false },
+    eventReminder: { email: true, inApp: true, sms: true, push: true },
+  });
+
+  const [twilioSettings, setTwilioSettings] = useState({
+    accountSid: '',
+    authToken: '',
+    phoneNumber: ''
+  });
+
+  const tabs = [
+    { id: 'email', label: 'Email Configuration', icon: Mail },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'sms', label: 'SMS Gateway', icon: Smartphone },
+    { id: 'social', label: 'Social Integrations', icon: MessageSquare },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Email & Messaging</h2>
+          <p className="mt-1 text-sm text-gray-500">Configure how your system communicates with clients and staff.</p>
+        </div>
+        <button className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500">
+          <Save className="h-4 w-4 mr-2" />
+          Save Changes
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`${
+                activeTab === tab.id
+                  ? 'border-pink-500 text-pink-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm`}
+            >
+              <tab.icon
+                className={`${
+                  activeTab === tab.id ? 'text-pink-500' : 'text-gray-400 group-hover:text-gray-500'
+                } -ml-0.5 mr-2 h-5 w-5`}
+                aria-hidden="true"
+              />
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Content */}
+      <div className="bg-white shadow rounded-lg p-6">
+        
+        {/* Email Configuration Tab */}
+        {activeTab === 'email' && (
+          <div className="space-y-8">
+            {/* SMTP Settings */}
+            <div>
+              <h3 className="text-lg font-medium leading-6 text-gray-900 flex items-center">
+                <Server className="h-5 w-5 mr-2 text-gray-400" />
+                SMTP Configuration
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">Configure your outgoing email server settings.</p>
+              <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
+                <div className="sm:col-span-4">
+                  <label className="block text-sm font-medium text-gray-700">SMTP Host</label>
+                  <input
+                    type="text"
+                    value={smtpSettings.host}
+                    onChange={(e) => setSmtpSettings({...smtpSettings, host: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">Port</label>
+                  <input
+                    type="text"
+                    value={smtpSettings.port}
+                    onChange={(e) => setSmtpSettings({...smtpSettings, port: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <label className="block text-sm font-medium text-gray-700">Username</label>
+                  <input
+                    type="text"
+                    value={smtpSettings.username}
+                    onChange={(e) => setSmtpSettings({...smtpSettings, username: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <label className="block text-sm font-medium text-gray-700">Password</label>
+                  <input
+                    type="password"
+                    value={smtpSettings.password}
+                    onChange={(e) => setSmtpSettings({...smtpSettings, password: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  />
+                </div>
+                <div className="sm:col-span-6">
+                  <div className="flex items-center">
+                    <input
+                      id="secure-smtp"
+                      type="checkbox"
+                      checked={smtpSettings.secure}
+                      onChange={(e) => setSmtpSettings({...smtpSettings, secure: e.target.checked})}
+                      className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="secure-smtp" className="ml-2 block text-sm text-gray-900">
+                      Use Secure Connection (SSL/TLS)
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-200 pt-8">
+              <h3 className="text-lg font-medium leading-6 text-gray-900 flex items-center">
+                <User className="h-5 w-5 mr-2 text-gray-400" />
+                Sender Identity
+              </h3>
+              <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
+                <div className="sm:col-span-3">
+                  <label className="block text-sm font-medium text-gray-700">From Name</label>
+                  <input
+                    type="text"
+                    value={smtpSettings.fromName}
+                    onChange={(e) => setSmtpSettings({...smtpSettings, fromName: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <label className="block text-sm font-medium text-gray-700">Reply-To Email</label>
+                  <input
+                    type="email"
+                    value={smtpSettings.replyTo}
+                    onChange={(e) => setSmtpSettings({...smtpSettings, replyTo: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-200 pt-8">
+              <h3 className="text-lg font-medium leading-6 text-gray-900">Global Email Signature</h3>
+              <p className="mt-1 text-sm text-gray-500">This signature will be appended to all system emails.</p>
+              <div className="mt-4">
+                <textarea
+                  rows={5}
+                  value={signature}
+                  onChange={(e) => setSignature(e.target.value)}
+                  className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm font-mono"
+                />
+                <p className="mt-2 text-xs text-gray-500">HTML is supported.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Notifications Tab */}
+        {activeTab === 'notifications' && (
+          <div>
+            <h3 className="text-lg font-medium leading-6 text-gray-900">Notification Preferences</h3>
+            <p className="mt-1 text-sm text-gray-500 mb-6">Choose how you want to be notified for different events.</p>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-5 gap-4 border-b border-gray-200 pb-2 font-medium text-sm text-gray-500">
+                <div className="col-span-1">Event Type</div>
+                <div className="text-center">Email</div>
+                <div className="text-center">In-App</div>
+                <div className="text-center">SMS</div>
+                <div className="text-center">Push</div>
+              </div>
+
+              {Object.entries(notifications).map(([key, prefs]) => (
+                <div key={key} className="grid grid-cols-5 gap-4 items-center py-2">
+                  <div className="col-span-1 text-sm font-medium text-gray-900 capitalize">
+                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                  </div>
+                  {Object.entries(prefs).map(([channel, enabled]) => (
+                    <div key={channel} className="flex justify-center">
+                      <input
+                        type="checkbox"
+                        checked={enabled}
+                        onChange={(e) => setNotifications({
+                          ...notifications,
+                          [key]: { ...prefs, [channel]: e.target.checked }
+                        })}
+                        className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* SMS Gateway Tab */}
+        {activeTab === 'sms' && (
+          <div>
+            <h3 className="text-lg font-medium leading-6 text-gray-900 flex items-center">
+              <Smartphone className="h-5 w-5 mr-2 text-gray-400" />
+              Twilio Configuration
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">Connect your Twilio account to enable SMS features.</p>
+            
+            <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
+              <div className="sm:col-span-4">
+                <label className="block text-sm font-medium text-gray-700">Account SID</label>
+                <input
+                  type="text"
+                  value={twilioSettings.accountSid}
+                  onChange={(e) => setTwilioSettings({...twilioSettings, accountSid: e.target.value})}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                />
+              </div>
+              <div className="sm:col-span-4">
+                <label className="block text-sm font-medium text-gray-700">Auth Token</label>
+                <input
+                  type="password"
+                  value={twilioSettings.authToken}
+                  onChange={(e) => setTwilioSettings({...twilioSettings, authToken: e.target.value})}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                />
+              </div>
+              <div className="sm:col-span-4">
+                <label className="block text-sm font-medium text-gray-700">Twilio Phone Number</label>
+                <input
+                  type="text"
+                  value={twilioSettings.phoneNumber}
+                  onChange={(e) => setTwilioSettings({...twilioSettings, phoneNumber: e.target.value})}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  placeholder="+1234567890"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Social Integrations Tab */}
+        {activeTab === 'social' && (
+          <div className="space-y-6">
+            <h3 className="text-lg font-medium leading-6 text-gray-900">Social Media Integrations</h3>
+            <p className="mt-1 text-sm text-gray-500">Connect your social accounts to manage messages directly.</p>
+
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div className="border rounded-lg p-6 flex flex-col items-center text-center space-y-4">
+                <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
+                  <Facebook className="h-6 w-6" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-medium text-gray-900">Facebook Messenger</h4>
+                  <p className="text-sm text-gray-500 mt-1">Receive and reply to page messages.</p>
+                </div>
+                <button className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
+                  Connect Facebook
+                </button>
+              </div>
+
+              <div className="border rounded-lg p-6 flex flex-col items-center text-center space-y-4">
+                <div className="h-12 w-12 bg-pink-100 rounded-full flex items-center justify-center text-pink-600">
+                  <Instagram className="h-6 w-6" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-medium text-gray-900">Instagram Direct</h4>
+                  <p className="text-sm text-gray-500 mt-1">Manage DMs and story replies.</p>
+                </div>
+                <button className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none">
+                  Connect Instagram
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
