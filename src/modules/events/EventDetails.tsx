@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Calendar, Clock, FileText, DollarSign, CheckSquare } from 'lucide-react';
+import { ArrowLeft, Edit, Calendar, FileText, DollarSign, CheckSquare } from 'lucide-react';
 import { eventService } from '../../services/eventService';
 import type { Event } from '../../types/event';
 import NotesTab from '../../components/NotesTab';
@@ -64,13 +64,22 @@ export default function EventDetails() {
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">{event.name}</h1>
         </div>
-        <Link
-          to={`/events/${event.id}/edit`}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
-        >
-          <Edit className="h-5 w-5 mr-2" />
-          Edit Event
-        </Link>
+        <div className="flex space-x-3">
+          <Link
+            to={`/events/${event.id}/questionnaire`}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+          >
+            <FileText className="h-5 w-5 mr-2" />
+            Questionnaire
+          </Link>
+          <Link
+            to={`/events/${event.id}/edit`}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+          >
+            <Edit className="h-5 w-5 mr-2" />
+            Edit Event
+          </Link>
+        </div>
       </div>
 
       <div className="border-b border-gray-200 overflow-x-auto">

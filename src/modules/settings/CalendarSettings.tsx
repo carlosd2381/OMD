@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar as CalendarIcon, Clock, Globe, Link as LinkIcon, Check, Copy } from 'lucide-react';
+import { ArrowLeft, Calendar as CalendarIcon, Clock, Globe, Link as LinkIcon, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { settingsService } from '../../services/settingsService';
 
 export default function CalendarSettings() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  // Mock state
   const [settings, setSettings] = useState({
     timezone: 'America/Cancun',
     weekStart: 'sunday', // sunday, monday
@@ -31,12 +31,54 @@ export default function CalendarSettings() {
     }
   });
 
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const data = await settingsService.getCalendarSettings();
+      if (data) {
+        // Parse working_hours JSON to extract everything
+        const config = data.working_hours as any || {};
+        setSettings({
+          timezone: data.timezone,
+          weekStart: data.week_start_day,
+          defaultView: config.defaultView || 'month',
+          workingHours: config.workingHours || { start: '09:00', end: '18:00', days: ['mon', 'tue', 'wed', 'thu', 'fri'] },
+          eventColors: config.eventColors || { wedding: '#db2777', corporate: '#2563eb', social: '#16a34a', meeting: '#9333ea', other: '#6b7280' },
+          integrations: config.integrations || { google: false, outlook: false, apple: false },
+        });
+      }
+    } catch (error) {
+      console.error('Error loading calendar settings:', error);
+      toast.error('Failed to load calendar settings');
+    }
+  };
+
   const handleSave = async () => {
     setLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    toast.success('Calendar settings saved successfully');
-    setLoading(false);
+    try {
+      // Pack everything into working_hours JSON
+      const packedConfig = {
+        workingHours: settings.workingHours,
+        defaultView: settings.defaultView,
+        eventColors: settings.eventColors,
+        integrations: settings.integrations,
+      };
+
+      await settingsService.updateCalendarSettings({
+        timezone: settings.timezone,
+        week_start_day: settings.weekStart,
+        working_hours: packedConfig,
+      });
+      toast.success('Calendar settings saved successfully');
+    } catch (error) {
+      console.error('Error saving calendar settings:', error);
+      toast.error('Failed to save calendar settings');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCopyLink = () => {

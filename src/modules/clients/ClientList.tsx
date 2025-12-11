@@ -2,25 +2,32 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react';
 import { clientService } from '../../services/clientService';
+import { eventService } from '../../services/eventService';
 import type { Client } from '../../types/client';
+import type { Event } from '../../types/event';
 import toast from 'react-hot-toast';
 
 export default function ClientList() {
   const navigate = useNavigate();
   const [clients, setClients] = useState<Client[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    loadClients();
+    loadData();
   }, []);
 
-  const loadClients = async () => {
+  const loadData = async () => {
     try {
-      const data = await clientService.getClients();
-      setClients(data);
+      const [clientsData, eventsData] = await Promise.all([
+        clientService.getClients(),
+        eventService.getEvents()
+      ]);
+      setClients(clientsData);
+      setEvents(eventsData);
     } catch (error) {
-      toast.error('Failed to load clients');
+      toast.error('Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -31,7 +38,7 @@ export default function ClientList() {
       try {
         await clientService.deleteClient(id);
         toast.success('Client deleted successfully');
-        loadClients();
+        loadData();
       } catch (error) {
         toast.error('Failed to delete client');
       }
@@ -75,60 +82,74 @@ export default function ClientList() {
 
       <div className="bg-white shadow overflow-hidden sm:rounded-md">
         <ul className="divide-y divide-gray-200">
-          {filteredClients.map((client) => (
-            <li key={client.id}>
-              <div 
-                onClick={() => navigate(`/clients/${client.id}`)}
-                className="px-4 py-4 sm:px-6 hover:bg-gray-50 flex items-center justify-between cursor-pointer"
-              >
-                <div className="flex items-center min-w-0 flex-1">
-                  <div className="min-w-0 flex-1 px-4 md:grid md:grid-cols-2 md:gap-4">
-                    <div>
-                      <p className="text-sm font-medium text-pink-600 truncate">{client.first_name} {client.last_name}</p>
-                      <p className="mt-1 flex items-center text-sm text-gray-500">
-                        <span className="truncate">{client.email}</span>
-                      </p>
-                    </div>
-                    <div className="hidden md:block">
+          {filteredClients.map((client) => {
+            const clientEvent = events.find(e => e.client_id === client.id);
+            return (
+              <li key={client.id}>
+                <div 
+                  onClick={() => navigate(`/clients/${client.id}`)}
+                  className="px-4 py-4 sm:px-6 hover:bg-gray-50 flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 px-4 md:grid md:grid-cols-2 md:gap-4">
                       <div>
-                        <p className="text-sm text-gray-900">
-                          {client.company_name || <span className="text-gray-400 italic">No Company</span>}
-                        </p>
-                        <p className="mt-1 text-sm text-gray-500">
-                          {client.phone || <span className="text-gray-400 italic">No Phone</span>}
-                        </p>
+                        <p className="text-sm font-medium text-pink-600 truncate">{client.first_name} {client.last_name}</p>
+                        {clientEvent ? (
+                          <p className="mt-1 text-sm text-gray-500">
+                            {clientEvent.date} • {clientEvent.venue_name || 'Venue TBD'}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-sm text-gray-400 italic">No Event Date • Venue TBD</p>
+                        )}
+                      </div>
+                      <div className="hidden md:block">
+                        {clientEvent ? (
+                          <div>
+                            <p className="text-sm text-gray-900">
+                              {clientEvent.guest_count ? `${clientEvent.guest_count} Guests` : 'Guests TBD'}
+                            </p>
+                            <p className="mt-1 text-sm text-gray-500 truncate">
+                              {clientEvent.services && clientEvent.services.length > 0 ? clientEvent.services.join(', ') : 'No Services'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-sm text-gray-400 italic">Guests TBD</p>
+                            <p className="mt-1 text-sm text-gray-400 italic">No Services</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
+                  <div className="flex items-center space-x-4">
+                    <Link
+                      to={`/clients/${client.id}`}
+                      className="text-gray-400 hover:text-gray-500"
+                      title="View"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Eye className="h-5 w-5" />
+                    </Link>
+                    <Link
+                      to={`/clients/${client.id}/edit`}
+                      className="text-gray-400 hover:text-gray-500"
+                      title="Edit"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Edit className="h-5 w-5" />
+                    </Link>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }}
+                      className="text-gray-400 hover:text-red-500"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-4">
-                  <Link
-                    to={`/clients/${client.id}`}
-                    className="text-gray-400 hover:text-gray-500"
-                    title="View"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Eye className="h-5 w-5" />
-                  </Link>
-                  <Link
-                    to={`/clients/${client.id}/edit`}
-                    className="text-gray-400 hover:text-gray-500"
-                    title="Edit"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Edit className="h-5 w-5" />
-                  </Link>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(client.id); }}
-                    className="text-gray-400 hover:text-red-500"
-                    title="Delete"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
           {filteredClients.length === 0 && (
             <li className="px-4 py-8 text-center text-gray-500">
               No clients found.

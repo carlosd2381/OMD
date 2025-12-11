@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CreditCard, Globe, Building2, Banknote, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { settingsService } from '../../services/settingsService';
 
 export default function PaymentMethodSettings() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  // Mock state
   const [methods, setMethods] = useState({
     stripe: {
       enabled: false,
@@ -46,12 +46,74 @@ export default function PaymentMethodSettings() {
     }
   });
 
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const data = await settingsService.getPaymentMethods();
+      if (data && data.length > 0) {
+        const newMethods = { ...methods };
+        
+        data.forEach(item => {
+          const key = item.type as keyof typeof methods;
+          if (newMethods[key]) {
+              const details = item.details as any || {};
+              // For cash, we don't have a top-level enabled, so we just merge details
+              if (key === 'cash') {
+                  newMethods[key] = { ...newMethods[key], ...details };
+              } else {
+                  newMethods[key] = {
+                      ...newMethods[key],
+                      ...details,
+                      enabled: item.is_active
+                  };
+              }
+          }
+        });
+        setMethods(newMethods);
+      }
+    } catch (error) {
+      console.error('Error loading payment methods:', error);
+      toast.error('Failed to load payment methods');
+    }
+  };
+
   const handleSave = async () => {
     setLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    toast.success('Payment methods saved successfully');
-    setLoading(false);
+    try {
+      const currentMethods = await settingsService.getPaymentMethods();
+      
+      for (const [key, config] of Object.entries(methods)) {
+        const existing = currentMethods.find(m => m.type === key);
+        const { enabled, ...details } = config as any;
+        
+        let isEnabled = enabled;
+        if (key === 'cash') {
+            isEnabled = details.mxnEnabled || details.usdEnabled;
+        }
+
+        const payload = {
+            name: key === 'bankTransfer' ? 'Bank Transfer' : key.charAt(0).toUpperCase() + key.slice(1),
+            type: key,
+            is_enabled: isEnabled !== undefined ? isEnabled : false,
+            details: details
+        };
+
+        if (existing) {
+            await settingsService.updatePaymentMethod(existing.id, payload);
+        } else {
+            await settingsService.createPaymentMethod(payload);
+        }
+      }
+      toast.success('Payment methods saved successfully');
+    } catch (error) {
+      console.error('Error saving payment methods:', error);
+      toast.error('Failed to save payment methods');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const updateMethod = (category: keyof typeof methods, field: string, value: any) => {
@@ -301,7 +363,7 @@ export default function PaymentMethodSettings() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center">
                 <Building2 className="h-5 w-5 mr-2 text-gray-500" />
-                <h3 className="text-lg font-medium text-gray-900">Direct Bank Transfer (SPEI)</h3>
+                <h3 className="text-lg font-medium text-gray-900">Direct Bank Transfer</h3>
               </div>
               <div className="flex items-center">
                 <span className="mr-3 text-sm text-gray-500">{methods.bankTransfer.enabled ? 'Enabled' : 'Disabled'}</span>
@@ -319,29 +381,11 @@ export default function PaymentMethodSettings() {
             {methods.bankTransfer.enabled && (
               <div className="space-y-4 animate-fadeIn">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Beneficiary Name</label>
-                  <input
-                    type="text"
-                    value={methods.bankTransfer.beneficiary}
-                    onChange={(e) => updateMethod('bankTransfer', 'beneficiary', e.target.value)}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-gray-500 focus:border-gray-500 sm:text-sm"
-                  />
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700">Bank Name</label>
                   <input
                     type="text"
                     value={methods.bankTransfer.bankName}
                     onChange={(e) => updateMethod('bankTransfer', 'bankName', e.target.value)}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-gray-500 focus:border-gray-500 sm:text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">CLABE (18 digits)</label>
-                  <input
-                    type="text"
-                    value={methods.bankTransfer.clabe}
-                    onChange={(e) => updateMethod('bankTransfer', 'clabe', e.target.value)}
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-gray-500 focus:border-gray-500 sm:text-sm"
                   />
                 </div>
@@ -355,7 +399,25 @@ export default function PaymentMethodSettings() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">SWIFT/BIC Code (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-700">CLABE / IBAN</label>
+                  <input
+                    type="text"
+                    value={methods.bankTransfer.clabe}
+                    onChange={(e) => updateMethod('bankTransfer', 'clabe', e.target.value)}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-gray-500 focus:border-gray-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Beneficiary Name</label>
+                  <input
+                    type="text"
+                    value={methods.bankTransfer.beneficiary}
+                    onChange={(e) => updateMethod('bankTransfer', 'beneficiary', e.target.value)}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-gray-500 focus:border-gray-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">SWIFT / BIC Code (Optional)</label>
                   <input
                     type="text"
                     value={methods.bankTransfer.swiftCode}
@@ -375,57 +437,58 @@ export default function PaymentMethodSettings() {
             </div>
             
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Accept MXN (Pesos)</span>
-                <button
-                  onClick={() => updateMethod('cash', 'mxnEnabled', !methods.cash.mxnEnabled)}
-                  className={`relative inline-flex shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 ${
-                    methods.cash.mxnEnabled ? 'bg-yellow-500' : 'bg-gray-200'
-                  }`}
-                >
-                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${methods.cash.mxnEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Accept USD (Dollars)</span>
-                <button
-                  onClick={() => updateMethod('cash', 'usdEnabled', !methods.cash.usdEnabled)}
-                  className={`relative inline-flex shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 ${
-                    methods.cash.usdEnabled ? 'bg-yellow-500' : 'bg-gray-200'
-                  }`}
-                >
-                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${methods.cash.usdEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                </button>
-              </div>
-
-              {(methods.cash.mxnEnabled || methods.cash.usdEnabled) && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Instructions for Client</label>
-                  <textarea
-                    rows={2}
-                    value={methods.cash.instructions}
-                    onChange={(e) => updateMethod('cash', 'instructions', e.target.value)}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500 sm:text-sm"
-                    placeholder="e.g. Pay at office Mon-Fri 9am-5pm"
+              <div className="flex items-center space-x-6">
+                <div className="flex items-center">
+                  <input
+                    id="cash-mxn"
+                    type="checkbox"
+                    checked={methods.cash.mxnEnabled}
+                    onChange={(e) => updateMethod('cash', 'mxnEnabled', e.target.checked)}
+                    className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
                   />
+                  <label htmlFor="cash-mxn" className="ml-2 block text-sm text-gray-900">
+                    Accept MXN
+                  </label>
                 </div>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-md bg-blue-50 p-4">
-            <div className="flex">
-              <div className="shrink-0">
-                <AlertCircle className="h-5 w-5 text-blue-400" aria-hidden="true" />
+                <div className="flex items-center">
+                  <input
+                    id="cash-usd"
+                    type="checkbox"
+                    checked={methods.cash.usdEnabled}
+                    onChange={(e) => updateMethod('cash', 'usdEnabled', e.target.checked)}
+                    className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="cash-usd" className="ml-2 block text-sm text-gray-900">
+                    Accept USD
+                  </label>
+                </div>
               </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-blue-800">Note on Payment Methods</h3>
-                <div className="mt-2 text-sm text-blue-700">
-                  <p>
-                    Enabled payment methods will appear on client invoices and in the client portal. 
-                    Ensure all API keys and account details are correct before enabling.
-                  </p>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Instructions for Client</label>
+                <textarea
+                  rows={2}
+                  value={methods.cash.instructions}
+                  onChange={(e) => updateMethod('cash', 'instructions', e.target.value)}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500 sm:text-sm"
+                  placeholder="e.g. Cash payments accepted at our office..."
+                />
+              </div>
+
+              <div className="rounded-md bg-yellow-50 p-4">
+                <div className="flex">
+                  <div className="shrink-0">
+                    <AlertCircle className="h-5 w-5 text-yellow-400" aria-hidden="true" />
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-yellow-800">Important Note</h3>
+                    <div className="mt-2 text-sm text-yellow-700">
+                      <p>
+                        Cash payments must be manually recorded in the system by an administrator. 
+                        Receipts should be generated only after funds are received.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

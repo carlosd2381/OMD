@@ -421,6 +421,7 @@ export type Database = {
         Row: {
           budget: number | null
           client_id: string
+          secondary_client_id: string | null
           created_at: string | null
           date: string
           guest_count: number | null
@@ -434,6 +435,7 @@ export type Database = {
         Insert: {
           budget?: number | null
           client_id: string
+          secondary_client_id?: string | null
           created_at?: string | null
           date: string
           guest_count?: number | null
@@ -447,6 +449,7 @@ export type Database = {
         Update: {
           budget?: number | null
           client_id?: string
+          secondary_client_id?: string | null
           created_at?: string | null
           date?: string
           guest_count?: number | null
@@ -523,6 +526,8 @@ export type Database = {
           id: string
           invoice_sequence_prefix: string | null
           invoice_sequence_start: number | null
+          quote_sequence_prefix: string | null
+          quote_sequence_start: number | null
           tax_rate: number
         }
         Insert: {
@@ -906,6 +911,7 @@ export type Database = {
           exchange_rate: number
           id: string
           items: Json
+          taxes?: Json
           parent_quote_id: string | null
           payment_plan_template_id: string | null
           questionnaire_template_id: string | null
@@ -923,6 +929,7 @@ export type Database = {
           exchange_rate: number
           id?: string
           items: Json
+          taxes?: Json
           parent_quote_id?: string | null
           payment_plan_template_id?: string | null
           questionnaire_template_id?: string | null
@@ -940,6 +947,7 @@ export type Database = {
           exchange_rate?: number
           id?: string
           items?: Json
+          taxes?: Json
           parent_quote_id?: string | null
           payment_plan_template_id?: string | null
           questionnaire_template_id?: string | null

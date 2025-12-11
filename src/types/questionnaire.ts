@@ -7,6 +7,8 @@ export interface Questionnaire {
   id: string;
   client_id: string;
   event_id: string;
+  quote_id?: string;
+  template_id?: string;
   title: string;
   status: 'pending' | 'completed';
   answers?: QuestionnaireAnswer[];

@@ -10,6 +10,7 @@ import { contractService } from '../../services/contractService';
 import { invoiceService } from '../../services/invoiceService';
 import { taskService } from '../../services/taskService';
 import { fileService } from '../../services/fileService';
+import { settingsService } from '../../services/settingsService';
 import type { Client } from '../../types/client';
 import type { Event } from '../../types/event';
 import type { Quote } from '../../types/quote';
@@ -47,6 +48,7 @@ export default function ClientDetails() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadDescription, setUploadDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [quotePrefix, setQuotePrefix] = useState('QTE');
 
   useEffect(() => {
     if (id) {
@@ -61,7 +63,7 @@ export default function ClientDetails() {
         setClient(data);
         
         // Fetch related data
-        const [events, clientQuotes, clientQuestionnaires, clientContracts, clientInvoices, clientTasks, templates, clientFiles] = await Promise.all([
+        const [events, clientQuotes, clientQuestionnaires, clientContracts, clientInvoices, clientTasks, templates, clientFiles, financialSettings] = await Promise.all([
           eventService.getEvents(),
           quoteService.getQuotesByClient(clientId),
           questionnaireService.getQuestionnairesByClient(clientId),
@@ -69,7 +71,8 @@ export default function ClientDetails() {
           invoiceService.getInvoicesByClient(clientId),
           taskService.getTasksByClient(clientId),
           taskService.getTemplates(),
-          fileService.getFilesByClient(clientId)
+          fileService.getFilesByClient(clientId),
+          settingsService.getFinancialSettings()
         ]);
 
         setQuotes(clientQuotes);
@@ -79,6 +82,10 @@ export default function ClientDetails() {
         setTasks(clientTasks);
         setTaskTemplates(templates);
         setFiles(clientFiles);
+
+        if (financialSettings?.quote_sequence_prefix) {
+          setQuotePrefix(financialSettings.quote_sequence_prefix);
+        }
 
         const event = events.find(e => e.client_id === clientId);
         if (event) {
@@ -95,6 +102,7 @@ export default function ClientDetails() {
         navigate('/clients');
       }
     } catch (error) {
+      console.error('Error loading client details:', error);
       toast.error('Failed to load client details');
     } finally {
       setLoading(false);
@@ -272,7 +280,7 @@ export default function ClientDetails() {
           </div>
           <div className="flex items-center">
             <MapPin className="mr-1.5 h-4 w-4 text-pink-500" />
-            {venueName || 'Venue TBD'}
+            {venueName || clientEvent.venue_name || 'Venue TBD'}
           </div>
           <div className="flex items-center">
             <Users className="mr-1.5 h-4 w-4 text-pink-500" />
@@ -280,7 +288,9 @@ export default function ClientDetails() {
           </div>
           <div className="flex items-center">
             <Cake className="mr-1.5 h-4 w-4 text-pink-500" />
-            Services
+            {clientEvent.services && clientEvent.services.length > 0 
+              ? clientEvent.services.join(', ') 
+              : 'Services TBD'}
           </div>
         </div>
       )}
@@ -415,7 +425,9 @@ export default function ClientDetails() {
                     >
                       <div className="flex items-center justify-between mr-4">
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-pink-600 truncate">Quote #{quote.id}</span>
+                          <span className="text-sm font-medium text-pink-600 truncate">
+                            {quotePrefix}-{new Date(quote.created_at).getFullYear().toString().substr(-2)}{String(new Date(quote.created_at).getMonth() + 1).padStart(2, '0')}{String(new Date(quote.created_at).getDate()).padStart(2, '0')}-001-{String(quotes.indexOf(quote) + 1).padStart(3, '0')}
+                          </span>
                           <span className="text-sm text-gray-500">
                             Total: ${quote.total_amount.toLocaleString()} {quote.currency && quote.currency !== 'MXN' && `(${quote.currency})`}
                           </span>
@@ -495,14 +507,31 @@ export default function ClientDetails() {
             {questionnaires.length > 0 ? (
               <ul className="divide-y divide-gray-200">
                 {questionnaires.map((q) => (
-                  <li key={q.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                  <li key={q.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 group">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-gray-900">{q.title}</span>
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        q.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {q.status.toUpperCase()}
-                      </span>
+                      <div className="flex items-center space-x-4">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          q.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {q.status.toUpperCase()}
+                        </span>
+                        <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => {
+                              if (q.template_id === '00000000-0000-0000-0000-000000000001' || q.template_id === 'system_booking_questionnaire') {
+                                navigate(`/events/${q.event_id}/questionnaire`);
+                              } else {
+                                navigate(`/questionnaires/${q.id}`);
+                              }
+                            }}
+                            className="p-1 text-gray-400 hover:text-gray-600"
+                            title="View"
+                          >
+                            <Eye className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -526,14 +555,25 @@ export default function ClientDetails() {
             {contracts.length > 0 ? (
               <ul className="divide-y divide-gray-200">
                 {contracts.map((c) => (
-                  <li key={c.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                  <li key={c.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 group">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-gray-900">Service Agreement</span>
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        c.status === 'signed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {c.status.toUpperCase()}
-                      </span>
+                      <div className="flex items-center space-x-4">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          c.status === 'signed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {c.status.toUpperCase()}
+                        </span>
+                        <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => navigate(`/contracts/${c.id}`)}
+                            className="p-1 text-gray-400 hover:text-gray-600"
+                            title="View"
+                          >
+                            <Eye className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -557,7 +597,7 @@ export default function ClientDetails() {
             {invoices.length > 0 ? (
               <ul className="divide-y divide-gray-200">
                 {invoices.map((inv) => (
-                  <li key={inv.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                  <li key={inv.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 group">
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-gray-900">Invoice #{inv.invoice_number}</span>
@@ -570,6 +610,15 @@ export default function ClientDetails() {
                         }`}>
                           {inv.status.toUpperCase()}
                         </span>
+                        <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => navigate(`/invoices/${inv.id}`)}
+                            className="p-1 text-gray-400 hover:text-gray-600"
+                            title="View"
+                          >
+                            <Eye className="h-5 w-5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </li>

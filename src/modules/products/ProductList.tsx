@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Database } from 'lucide-react';
 import { productService } from '../../services/productService';
 import type { Product } from '../../types/product';
 import toast from 'react-hot-toast';
 import ProductForm from './ProductForm';
+import { SEED_PRODUCTS } from '../../data/seedProducts';
 
 export default function ProductList() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -69,6 +70,35 @@ export default function ProductList() {
     loadProducts();
   };
 
+  const handleSeedProducts = async () => {
+    if (!confirm('This will add default products to your database. Continue?')) return;
+    
+    setLoading(true);
+    try {
+      let addedCount = 0;
+      for (const product of SEED_PRODUCTS) {
+        // Check if product already exists by name to avoid duplicates
+        const exists = products.some(p => p.name === product.name);
+        if (!exists) {
+          await productService.createProduct(product);
+          addedCount++;
+        }
+      }
+      
+      if (addedCount > 0) {
+        toast.success(`Added ${addedCount} new products`);
+        loadProducts();
+      } else {
+        toast('All products already exist', { icon: 'ℹ️' });
+      }
+    } catch (error) {
+      console.error('Error seeding products:', error);
+      toast.error('Failed to seed products');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     product.category.toLowerCase().includes(searchTerm.toLowerCase())
@@ -89,13 +119,23 @@ export default function ProductList() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Products & Services</h1>
-        <button
-          onClick={handleAdd}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Add Product
-        </button>
+                <div className="flex gap-2">
+          <button
+            onClick={handleSeedProducts}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+            title="Import Default Products"
+          >
+            <Database className="h-5 w-5 mr-2" />
+            <span className="hidden sm:inline">Import Defaults</span>
+          </button>
+          <button
+            onClick={handleAdd}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+          >
+            <Plus className="h-5 w-5 mr-2" />
+            Add Product
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center px-4 py-3 bg-white border border-gray-200 rounded-lg shadow-sm">

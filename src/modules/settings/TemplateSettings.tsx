@@ -12,17 +12,10 @@ import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import TextAlign from '@tiptap/extension-text-align';
 import toast from 'react-hot-toast';
-
-type TemplateType = 'email' | 'contract' | 'invoice' | 'quote' | 'questionnaire';
-
-interface Template {
-  id: string;
-  name: string;
-  type: TemplateType;
-  subject?: string; // For emails
-  content: string; // HTML for RTE, JSON string for Questionnaire
-  lastModified: string;
-}
+import { templateService } from '../../services/templateService';
+import { settingsService, type Token } from '../../services/settingsService';
+import { SYSTEM_TOKENS } from '../../constants/tokens';
+import type { Template, TemplateType } from '../../types/template';
 
 type QuestionType = 
   // Layout
@@ -44,53 +37,11 @@ interface Question {
   linkedToken?: string;
 }
 
-const INITIAL_TEMPLATES: Template[] = [
-  {
-    id: '1',
-    name: 'Welcome Email',
-    type: 'email',
-    subject: 'Welcome to OMD Events!',
-    content: '<p>Hi {{client_first_name}},</p><p>Welcome to OMD Events! We are thrilled to have you.</p>',
-    lastModified: '2024-03-10'
-  },
-  {
-    id: '2',
-    name: 'Standard Wedding Contract',
-    type: 'contract',
-    content: '<h1>Wedding Services Agreement</h1><p>This agreement is made on {{current_date}} between...</p>',
-    lastModified: '2024-02-15'
-  },
-  {
-    id: '3',
-    name: 'Corporate Invoice',
-    type: 'invoice',
-    content: '<h2>Invoice #{{invoice_number}}</h2><p>Total Due: {{invoice_total}}</p>',
-    lastModified: '2024-01-20'
-  },
-  {
-    id: '4',
-    name: 'Pre-Event Questionnaire',
-    type: 'questionnaire',
-    content: JSON.stringify([
-      { id: 'q1', type: 'text', label: 'What is your preferred color scheme?', required: true },
-      { id: 'q2', type: 'select', label: 'How many guests are you expecting?', required: true, options: ['0-50', '50-100', '100+'] }
-    ]),
-    lastModified: '2024-03-15'
-  }
-];
-
-const AVAILABLE_TOKENS = [
-  { key: 'client_first_name', label: 'Client First Name' },
-  { key: 'client_last_name', label: 'Client Last Name' },
-  { key: 'event_date', label: 'Event Date' },
-  { key: 'company_name', label: 'Company Name' },
-  { key: 'invoice_total', label: 'Invoice Total' },
-];
-
 export default function TemplateSettings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TemplateType>('email');
-  const [templates, setTemplates] = useState<Template[]>(INITIAL_TEMPLATES);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [availableTokens, setAvailableTokens] = useState<Token[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [currentTemplate, setCurrentTemplate] = useState<Template | null>(null);
@@ -124,8 +75,41 @@ export default function TemplateSettings() {
     },
   });
 
+  useEffect(() => {
+    loadTemplates();
+    loadTokens();
+  }, [activeTab]);
+
+  const loadTokens = async () => {
+    try {
+      const customTokens = await settingsService.getTokens();
+      
+      const systemTokensMapped = SYSTEM_TOKENS.map(t => ({
+        id: `sys_${t.key}`,
+        key: t.key,
+        label: t.label,
+        category: t.category,
+        default_value: null,
+        created_at: null
+      }));
+
+      setAvailableTokens([...systemTokensMapped, ...customTokens]);
+    } catch (error) {
+      console.error('Error loading tokens:', error);
+    }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const data = await templateService.getTemplates(activeTab);
+      setTemplates(data);
+    } catch (error) {
+      console.error('Error loading templates:', error);
+      toast.error('Failed to load templates');
+    }
+  };
+
   const filteredTemplates = templates.filter(t => 
-    t.type === activeTab && 
     t.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -156,14 +140,20 @@ export default function TemplateSettings() {
     setIsEditorOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this template?')) {
-      setTemplates(templates.filter(t => t.id !== id));
-      toast.success('Template deleted');
+      try {
+        await templateService.deleteTemplate(id);
+        toast.success('Template deleted');
+        loadTemplates();
+      } catch (error) {
+        console.error('Error deleting template:', error);
+        toast.error('Failed to delete template');
+      }
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editorName) {
       toast.error('Template name is required');
       return;
@@ -176,23 +166,30 @@ export default function TemplateSettings() {
       content = editor?.getHTML() || '';
     }
 
-    const newTemplate: Template = {
-      id: currentTemplate?.id || Math.random().toString(36).substr(2, 9),
-      name: editorName,
-      type: activeTab,
-      subject: activeTab === 'email' ? editorSubject : undefined,
-      content,
-      lastModified: new Date().toISOString().split('T')[0]
-    };
-
-    if (currentTemplate) {
-      setTemplates(templates.map(t => t.id === currentTemplate.id ? newTemplate : t));
-      toast.success('Template updated');
-    } else {
-      setTemplates([...templates, newTemplate]);
-      toast.success('Template created');
+    try {
+      if (currentTemplate) {
+        await templateService.updateTemplate(currentTemplate.id, {
+          name: editorName,
+          type: activeTab,
+          subject: activeTab === 'email' ? editorSubject : undefined,
+          content
+        });
+        toast.success('Template updated');
+      } else {
+        await templateService.createTemplate({
+          name: editorName,
+          type: activeTab,
+          subject: activeTab === 'email' ? editorSubject : undefined,
+          content
+        });
+        toast.success('Template created');
+      }
+      setIsEditorOpen(false);
+      loadTemplates();
+    } catch (error) {
+      console.error('Error saving template:', error);
+      toast.error('Failed to save template');
     }
-    setIsEditorOpen(false);
   };
 
   const insertToken = (tokenKey: string) => {
@@ -241,7 +238,7 @@ export default function TemplateSettings() {
     if (!aiPrompt) return;
     setIsGenerating(true);
     
-    // Mock AI generation
+    // Mock AI generation - keeping this as mock for now since we don't have real AI backend
     setTimeout(() => {
       if (activeTab === 'questionnaire') {
         const mockQuestions: Question[] = [
@@ -443,7 +440,7 @@ export default function TemplateSettings() {
                           className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
                         >
                           <option value="">-- No Link --</option>
-                          {AVAILABLE_TOKENS.map(t => (
+                          {availableTokens.map(t => (
                             <option key={t.key} value={t.key}>{t.label} ({'{'}{'{'}{t.key}{'}'}{'}'})</option>
                           ))}
                         </select>
@@ -575,7 +572,7 @@ export default function TemplateSettings() {
                 </button>
                 <div className="absolute left-0 mt-1 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 hidden group-hover:block">
                   <div className="py-1" role="menu">
-                    {AVAILABLE_TOKENS.map((token) => (
+                    {availableTokens.map((token) => (
                       <button
                         key={token.key}
                         onClick={() => insertToken(token.key)}
@@ -749,10 +746,18 @@ export default function TemplateSettings() {
                       <Edit2 className="h-5 w-5" />
                     </button>
                     <button 
-                      onClick={() => {
-                        const newT = { ...template, id: Math.random().toString(36).substr(2, 9), name: `${template.name} (Copy)` };
-                        setTemplates([...templates, newT]);
-                        toast.success('Template duplicated');
+                      onClick={async () => {
+                        try {
+                          await templateService.createTemplate({
+                            ...template,
+                            name: `${template.name} (Copy)`
+                          });
+                          toast.success('Template duplicated');
+                          loadTemplates();
+                        } catch (error) {
+                          console.error('Error duplicating template:', error);
+                          toast.error('Failed to duplicate template');
+                        }
                       }}
                       className="p-2 text-gray-400 hover:text-green-600"
                       title="Duplicate"

@@ -1,31 +1,48 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Upload, Moon, Sun, Monitor, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { settingsService, type BrandingSettings as BrandingSettingsType } from '../../services/settingsService';
 
 export default function BrandingSettings() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  
-  // Mock state - in a real app this would come from a context or API
-  const [settings, setSettings] = useState({
-    theme: 'system', // light, dark, system
-    colors: {
-      primary: '#E6C0B0', // Dusty Peach
-      secondary: '#EBE0D6', // Latte Cream
-      accent: '#7E6C5E', // Taupe Brown
-      background: '#ffffff',
-      text: '#7E6C5E', // Taupe Brown
-    },
-    logo: null as string | null,
+  const [settings, setSettings] = useState<Partial<BrandingSettingsType>>({
+    theme_mode: 'system',
+    primary_color: '#E6C0B0',
+    secondary_color: '#EBE0D6',
+    accent_color: '#7E6C5E',
+    company_name: 'OMD Events',
+    logo_url: null,
   });
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const data = await settingsService.getBrandingSettings();
+      if (data) {
+        setSettings(data);
+      }
+    } catch (error) {
+      console.error('Error loading branding settings:', error);
+      toast.error('Failed to load branding settings');
+    }
+  };
 
   const handleSave = async () => {
     setLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    toast.success('Branding settings saved successfully');
-    setLoading(false);
+    try {
+      await settingsService.updateBrandingSettings(settings);
+      toast.success('Branding settings saved successfully');
+    } catch (error) {
+      console.error('Error saving branding settings:', error);
+      toast.error('Failed to save branding settings');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -33,7 +50,7 @@ export default function BrandingSettings() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setSettings({ ...settings, logo: reader.result as string });
+        setSettings({ ...settings, logo_url: reader.result as string });
       };
       reader.readAsDataURL(file);
     }
@@ -78,9 +95,9 @@ export default function BrandingSettings() {
               ].map((mode) => (
                 <button
                   key={mode.id}
-                  onClick={() => setSettings({ ...settings, theme: mode.id })}
+                  onClick={() => setSettings({ ...settings, theme_mode: mode.id as any })}
                   className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg transition-all ${
-                    settings.theme === mode.id
+                    settings.theme_mode === mode.id
                       ? 'border-pink-500 bg-pink-50 text-pink-700'
                       : 'border-gray-200 hover:border-gray-300 text-gray-600'
                   }`}
@@ -97,8 +114,8 @@ export default function BrandingSettings() {
             <h3 className="text-lg font-medium text-gray-900 mb-4">Brand Logo</h3>
             <div className="flex items-center space-x-6">
               <div className="shrink-0 h-24 w-24 border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex items-center justify-center">
-                {settings.logo ? (
-                  <img src={settings.logo} alt="Logo preview" className="h-full w-full object-contain" />
+                {settings.logo_url ? (
+                  <img src={settings.logo_url} alt="Logo preview" className="h-full w-full object-contain" />
                 ) : (
                   <span className="text-gray-400 text-xs text-center px-2">No logo uploaded</span>
                 )}
@@ -136,20 +153,14 @@ export default function BrandingSettings() {
                 <div className="flex items-center space-x-2">
                   <input
                     type="color"
-                    value={settings.colors.primary}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      colors: { ...settings.colors, primary: e.target.value }
-                    })}
+                    value={settings.primary_color}
+                    onChange={(e) => setSettings({ ...settings, primary_color: e.target.value })}
                     className="h-10 w-10 rounded border border-gray-300 cursor-pointer"
                   />
                   <input
                     type="text"
-                    value={settings.colors.primary}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      colors: { ...settings.colors, primary: e.target.value }
-                    })}
+                    value={settings.primary_color}
+                    onChange={(e) => setSettings({ ...settings, primary_color: e.target.value })}
                     className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500 sm:text-sm"
                   />
                 </div>
@@ -160,20 +171,14 @@ export default function BrandingSettings() {
                 <div className="flex items-center space-x-2">
                   <input
                     type="color"
-                    value={settings.colors.secondary}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      colors: { ...settings.colors, secondary: e.target.value }
-                    })}
+                    value={settings.secondary_color}
+                    onChange={(e) => setSettings({ ...settings, secondary_color: e.target.value })}
                     className="h-10 w-10 rounded border border-gray-300 cursor-pointer"
                   />
                   <input
                     type="text"
-                    value={settings.colors.secondary}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      colors: { ...settings.colors, secondary: e.target.value }
-                    })}
+                    value={settings.secondary_color}
+                    onChange={(e) => setSettings({ ...settings, secondary_color: e.target.value })}
                     className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500 sm:text-sm"
                   />
                 </div>
@@ -184,20 +189,14 @@ export default function BrandingSettings() {
                 <div className="flex items-center space-x-2">
                   <input
                     type="color"
-                    value={settings.colors.accent}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      colors: { ...settings.colors, accent: e.target.value }
-                    })}
+                    value={settings.accent_color}
+                    onChange={(e) => setSettings({ ...settings, accent_color: e.target.value })}
                     className="h-10 w-10 rounded border border-gray-300 cursor-pointer"
                   />
                   <input
                     type="text"
-                    value={settings.colors.accent}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      colors: { ...settings.colors, accent: e.target.value }
-                    })}
+                    value={settings.accent_color}
+                    onChange={(e) => setSettings({ ...settings, accent_color: e.target.value })}
                     className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500 sm:text-sm"
                   />
                 </div>
@@ -214,7 +213,7 @@ export default function BrandingSettings() {
               {/* Mock App Header */}
               <div 
                 className="h-12 px-4 flex items-center justify-between"
-                style={{ backgroundColor: settings.colors.primary }}
+                style={{ backgroundColor: settings.primary_color }}
               >
                 <div className="flex items-center space-x-2">
                   <div className="h-6 w-6 bg-white/20 rounded-md"></div>
@@ -242,7 +241,7 @@ export default function BrandingSettings() {
                       <div className="flex justify-end">
                         <button 
                           className="px-3 py-1.5 rounded text-xs font-medium text-white"
-                          style={{ backgroundColor: settings.colors.primary }}
+                          style={{ backgroundColor: settings.primary_color }}
                         >
                           Primary Action
                         </button>
@@ -250,15 +249,15 @@ export default function BrandingSettings() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="h-24 bg-white rounded-lg shadow-sm p-3 border-l-4" style={{ borderColor: settings.colors.secondary }}>
+                      <div className="h-24 bg-white rounded-lg shadow-sm p-3 border-l-4" style={{ borderColor: settings.secondary_color }}>
                         <div className="h-4 w-1/2 bg-gray-100 rounded mb-2"></div>
-                        <div className="h-8 w-8 rounded-full flex items-center justify-center" style={{ backgroundColor: settings.colors.secondary }}>
-                          <Check className="h-4 w-4" style={{ color: settings.colors.primary }} />
+                        <div className="h-8 w-8 rounded-full flex items-center justify-center" style={{ backgroundColor: settings.secondary_color }}>
+                          <Check className="h-4 w-4" style={{ color: settings.primary_color }} />
                         </div>
                       </div>
-                      <div className="h-24 bg-white rounded-lg shadow-sm p-3 border-l-4" style={{ borderColor: settings.colors.accent }}>
+                      <div className="h-24 bg-white rounded-lg shadow-sm p-3 border-l-4" style={{ borderColor: settings.accent_color }}>
                         <div className="h-4 w-1/2 bg-gray-100 rounded mb-2"></div>
-                        <div className="h-8 w-8 rounded-full flex items-center justify-center" style={{ backgroundColor: settings.colors.accent }}>
+                        <div className="h-8 w-8 rounded-full flex items-center justify-center" style={{ backgroundColor: settings.accent_color }}>
                           <div className="h-4 w-4 bg-white/50 rounded-full"></div>
                         </div>
                       </div>

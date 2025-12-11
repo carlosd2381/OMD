@@ -37,7 +37,12 @@ import EmailMessagingSettings from './modules/settings/EmailMessagingSettings';
 import AutomationSettings from './modules/settings/AutomationSettings';
 import ClientPortal from './modules/portal/ClientPortal';
 import QuoteBuilder from './modules/quotes/QuoteBuilder';
+import QuoteViewer from './modules/quotes/QuoteViewer';
 import ProductList from './modules/products/ProductList';
+import BookingQuestionnaire from './modules/questionnaires/BookingQuestionnaire';
+import ContractViewer from './modules/contracts/ContractViewer';
+import InvoiceViewer from './modules/invoices/InvoiceViewer';
+import QuestionnaireViewer from './modules/questionnaires/QuestionnaireViewer';
 
 // Placeholder components for routes
 const Dashboard = () => <h1 className="text-2xl font-bold">Dashboard</h1>;
@@ -83,12 +88,16 @@ function App() {
             <Route path="new" element={<EventForm />} />
             <Route path=":id" element={<EventDetails />} />
             <Route path=":id/edit" element={<EventForm />} />
+            <Route path=":eventId/questionnaire" element={<BookingQuestionnaire />} />
           </Route>
           <Route path="quotes">
             <Route path="new" element={<QuoteBuilder />} />
-            <Route path=":id" element={<QuoteBuilder />} />
+            <Route path=":id" element={<QuoteViewer />} />
             <Route path=":id/edit" element={<QuoteBuilder />} />
           </Route>
+          <Route path="contracts/:id" element={<ContractViewer />} />
+          <Route path="invoices/:id" element={<InvoiceViewer />} />
+          <Route path="questionnaires/:id" element={<QuestionnaireViewer />} />
           <Route path="products" element={<ProductList />} />
           <Route path="documents/*" element={<Documents />} />
           <Route path="settings">

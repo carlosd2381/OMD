@@ -8,6 +8,7 @@ export interface Lead {
   event_type?: 'Wedding' | 'Social Event' | 'Corporate Event' | 'Convention' | 'Other';
   event_date?: string;
   guest_count?: number;
+  budget?: number;
   venue_name?: string;
   services_interested?: string[];
   notes?: string;

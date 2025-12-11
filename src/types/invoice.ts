@@ -13,6 +13,7 @@ export interface Invoice {
   total_amount: number;
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   due_date: string;
+  type: 'retainer' | 'installment' | 'final_balance' | 'standard';
   paid_at?: string;
   created_at: string;
   updated_at: string;

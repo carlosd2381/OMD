@@ -1,56 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Search, Filter, MoreVertical, Shield, Key, LogOut, Mail, User, Clock, Smartphone, Monitor } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Filter, Shield, LogOut, User as UserIcon, Clock, Smartphone, Monitor } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-type UserStatus = 'active' | 'pending' | 'deactivated';
-type Role = 'admin' | 'manager' | 'staff';
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  status: UserStatus;
-  lastLogin: string;
-}
-
-interface Session {
-  id: string;
-  userId: string;
-  userName: string;
-  device: string;
-  type: 'mobile' | 'desktop';
-  ip: string;
-  lastActive: string;
-  location: string;
-}
-
-const MOCK_USERS: User[] = [
-  { id: '1', name: 'Admin User', email: 'admin@omd.com', role: 'admin', status: 'active', lastLogin: '2023-10-25 10:30 AM' },
-  { id: '2', name: 'Sarah Baker', email: 'sarah@omd.com', role: 'manager', status: 'active', lastLogin: '2023-10-24 02:15 PM' },
-  { id: '3', name: 'John Dough', email: 'john@omd.com', role: 'staff', status: 'pending', lastLogin: '-' },
-  { id: '4', name: 'Ex Employee', email: 'ex@omd.com', role: 'staff', status: 'deactivated', lastLogin: '2023-09-15 09:00 AM' },
-];
-
-const MOCK_SESSIONS: Session[] = [
-  { id: 's1', userId: '1', userName: 'Admin User', device: 'Chrome on macOS', type: 'desktop', ip: '192.168.1.1', lastActive: 'Just now', location: 'Mexico City, MX' },
-  { id: 's2', userId: '2', userName: 'Sarah Baker', device: 'Safari on iPhone', type: 'mobile', ip: '10.0.0.5', lastActive: '5 mins ago', location: 'Guadalajara, MX' },
-  { id: 's3', userId: '1', userName: 'Admin User', device: 'Firefox on Windows', type: 'desktop', ip: '192.168.1.2', lastActive: '2 hours ago', location: 'Mexico City, MX' },
-];
+import { userService, type User, type Session, type UserRole, type UserStatus } from '../../services/userService';
 
 export default function UserManagementSettings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'users' | 'security' | 'sessions'>('users');
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
-  const [sessions, setSessions] = useState<Session[]>(MOCK_SESSIONS);
+  const [users, setUsers] = useState<User[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<UserStatus | 'all'>('all');
   
   // Invite Modal State
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<Role>('staff');
+  const [inviteRole, setInviteRole] = useState<UserRole>('staff');
 
   // Security Settings State
   const [securitySettings, setSecuritySettings] = useState({
@@ -60,6 +25,24 @@ export default function UserManagementSettings() {
     sessionTimeoutMinutes: 60,
   });
 
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [usersData, sessionsData] = await Promise.all([
+        userService.getUsers(),
+        userService.getSessions()
+      ]);
+      setUsers(usersData);
+      setSessions(sessionsData);
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      toast.error('Failed to load user data');
+    }
+  };
+
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           user.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -67,45 +50,60 @@ export default function UserManagementSettings() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleInvite = () => {
+  const handleInvite = async () => {
     if (!inviteEmail) return;
-    const newUser: User = {
-      id: Date.now().toString(),
-      name: inviteEmail.split('@')[0], // Placeholder name
-      email: inviteEmail,
-      role: inviteRole,
-      status: 'pending',
-      lastLogin: '-',
-    };
-    setUsers([...users, newUser]);
-    setIsInviteModalOpen(false);
-    setInviteEmail('');
-    toast.success(`Invitation sent to ${inviteEmail}`);
+    try {
+      await userService.inviteUser(inviteEmail, inviteRole);
+      toast.success(`Invitation sent to ${inviteEmail}`);
+      setIsInviteModalOpen(false);
+      setInviteEmail('');
+      loadData();
+    } catch (error) {
+      console.error('Error inviting user:', error);
+      toast.error('Failed to invite user');
+    }
   };
 
-  const handleRevokeSession = (sessionId: string) => {
-    setSessions(sessions.filter(s => s.id !== sessionId));
-    toast.success('Session revoked');
+  const handleRevokeSession = async (sessionId: string) => {
+    try {
+      await userService.revokeSession(sessionId);
+      setSessions(sessions.filter(s => s.id !== sessionId));
+      toast.success('Session revoked');
+    } catch (error) {
+      console.error('Error revoking session:', error);
+      toast.error('Failed to revoke session');
+    }
   };
 
-  const handleRevokeAllSessions = () => {
-    setSessions([]);
-    toast.success('All sessions revoked');
+  const handleRevokeAllSessions = async () => {
+    try {
+      await userService.revokeAllSessions();
+      setSessions([]);
+      toast.success('All sessions revoked');
+    } catch (error) {
+      console.error('Error revoking all sessions:', error);
+      toast.error('Failed to revoke all sessions');
+    }
   };
 
   const handleSaveSecurity = () => {
+    // In a real app, save to DB
     toast.success('Security policies updated');
   };
 
-  const toggleUserStatus = (userId: string) => {
-    setUsers(users.map(u => {
-      if (u.id === userId) {
-        const newStatus = u.status === 'active' ? 'deactivated' : 'active';
-        return { ...u, status: newStatus };
-      }
-      return u;
-    }));
-    toast.success('User status updated');
+  const toggleUserStatus = async (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    
+    const newStatus: UserStatus = user.status === 'active' ? 'deactivated' : 'active';
+    try {
+      await userService.updateUserStatus(userId, newStatus);
+      setUsers(users.map(u => u.id === userId ? { ...u, status: newStatus } : u));
+      toast.success('User status updated');
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      toast.error('Failed to update user status');
+    }
   };
 
   return (
@@ -145,7 +143,7 @@ export default function UserManagementSettings() {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
-            <User className="h-4 w-4 mr-2" />
+            <UserIcon className="h-4 w-4 mr-2" />
             Users
           </button>
           <button
@@ -424,7 +422,7 @@ export default function UserManagementSettings() {
                 <label className="block text-sm font-medium text-gray-700">Role</label>
                 <select
                   value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as Role)}
+                  onChange={(e) => setInviteRole(e.target.value as UserRole)}
                   className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-pink-500 focus:border-pink-500 sm:text-sm rounded-md"
                 >
                   <option value="staff">Staff (Limited Access)</option>

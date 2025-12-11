@@ -1,20 +1,112 @@
-import type { Template } from '../types/template';
+import { supabase } from '../lib/supabase';
+import type { Template, TemplateType } from '../types/template';
+import type { Database } from '../types/supabase';
 
-const MOCK_TEMPLATES: Template[] = [
-  { id: '1', name: 'Standard Wedding Questionnaire', type: 'questionnaire', content: '{}' },
-  { id: '2', name: 'Corporate Event Questionnaire', type: 'questionnaire', content: '{}' },
-  { id: '3', name: 'Standard Service Agreement', type: 'contract', content: '...' },
-  { id: '4', name: 'Vendor Agreement', type: 'contract', content: '...' },
-  { id: '5', name: '50/50 Split', type: 'payment_plan', content: '50% deposit, 50% before event' },
-  { id: '6', name: '3 Payments (30/30/40)', type: 'payment_plan', content: '30% deposit, 30% midway, 40% before event' },
-];
+type TemplateRow = Database['public']['Tables']['templates']['Row'];
+type TemplateInsert = Database['public']['Tables']['templates']['Insert'];
+type TemplateUpdate = Database['public']['Tables']['templates']['Update'];
+
+function mapToTemplate(row: TemplateRow): Template {
+  let content = row.content || '';
+  if (row.type === 'questionnaire' && row.questions) {
+    content = JSON.stringify(row.questions);
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type as TemplateType,
+    subject: row.subject || undefined,
+    content: content,
+    lastModified: row.last_modified || row.created_at || undefined,
+  };
+}
 
 export const templateService = {
   getTemplates: async (type?: Template['type']): Promise<Template[]> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
+    let query = supabase
+      .from('templates')
+      .select('*')
+      .order('name', { ascending: true });
+
     if (type) {
-      return MOCK_TEMPLATES.filter(t => t.type === type);
+      query = query.eq('type', type as any);
     }
-    return MOCK_TEMPLATES;
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return (data || []).map(mapToTemplate);
   },
+
+  createTemplate: async (template: Omit<Template, 'id' | 'lastModified'>): Promise<Template> => {
+    const insertData: TemplateInsert = {
+      name: template.name,
+      type: template.type as any,
+      subject: template.subject,
+      content: template.type !== 'questionnaire' ? template.content : null,
+      questions: template.type === 'questionnaire' ? JSON.parse(template.content) : null,
+      is_active: true,
+    };
+
+    const { data, error } = await supabase
+      .from('templates')
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return mapToTemplate(data);
+  },
+
+  updateTemplate: async (id: string, template: Partial<Template>): Promise<Template> => {
+    const updateData: TemplateUpdate = {
+      last_modified: new Date().toISOString(),
+    };
+
+    if (template.name) updateData.name = template.name;
+    if (template.type) updateData.type = template.type as any;
+    if (template.subject !== undefined) updateData.subject = template.subject;
+    
+    if (template.content !== undefined) {
+      if (template.type === 'questionnaire') {
+         updateData.questions = JSON.parse(template.content);
+         updateData.content = null;
+      } else if (template.type) {
+         updateData.content = template.content;
+         updateData.questions = null;
+      } else {
+         // Fallback: try to detect if it's a questionnaire update
+         try {
+            const parsed = JSON.parse(template.content);
+            if (Array.isArray(parsed)) {
+                updateData.questions = parsed;
+            } else {
+                updateData.content = template.content;
+            }
+         } catch {
+            updateData.content = template.content;
+         }
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('templates')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return mapToTemplate(data);
+  },
+
+  deleteTemplate: async (id: string): Promise<void> => {
+    const { error } = await supabase
+      .from('templates')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  }
 };

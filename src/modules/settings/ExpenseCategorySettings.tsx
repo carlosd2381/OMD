@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Circle, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Edit2, ChevronDown, ChevronRight, Circle, CheckCircle2, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { settingsService } from '../../services/settingsService';
 
 interface ChildCategory {
   id: string;
@@ -120,8 +121,9 @@ const INITIAL_DATA: ParentCategory[] = [
 
 export default function ExpenseCategorySettings() {
   const navigate = useNavigate();
-  const [categories, setCategories] = useState<ParentCategory[]>(INITIAL_DATA);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(INITIAL_DATA.map(c => c.id)));
+  const [categories, setCategories] = useState<ParentCategory[]>([]);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -129,6 +131,58 @@ export default function ExpenseCategorySettings() {
   const [editingChildId, setEditingChildId] = useState<string | null>(null);
   const [modalName, setModalName] = useState('');
   const [modalColor, setModalColor] = useState('#000000');
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  const loadCategories = async () => {
+    setLoading(true);
+    try {
+      const data = await settingsService.getExpenseCategories();
+      if (data.length === 0) {
+          // Seed defaults if empty
+          // We'll just show them in UI for now, and let user save them individually? 
+          // Or better, just set them as state and let user interact.
+          // But if we want them to persist, we should probably create them.
+          // For now, let's just set them in state. If user edits, we might have issues with IDs.
+          // So let's create them in DB.
+          await seedDefaults();
+          return; // seedDefaults calls loadCategories again
+      }
+
+      const mapped: ParentCategory[] = data.map(item => ({
+        id: item.id,
+        name: item.name,
+        color: item.color || '#000000',
+        isActive: item.is_active !== false,
+        children: ((item as any).children as any[]) || []
+      }));
+      setCategories(mapped);
+      setExpandedIds(new Set(mapped.map(c => c.id)));
+    } catch (error) {
+      console.error('Error loading expense categories:', error);
+      toast.error('Failed to load expense categories');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const seedDefaults = async () => {
+      try {
+          for (const cat of INITIAL_DATA) {
+              await settingsService.createExpenseCategory({
+                  name: cat.name,
+                  color: cat.color,
+                  is_active: cat.isActive,
+                  children: cat.children
+              } as any);
+          }
+          await loadCategories();
+      } catch (error) {
+          console.error('Error seeding defaults:', error);
+      }
+  };
 
   const toggleExpand = (id: string) => {
     const newExpanded = new Set(expandedIds);
@@ -170,81 +224,95 @@ export default function ExpenseCategorySettings() {
     setIsModalOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!modalName.trim()) {
       toast.error('Name is required');
       return;
     }
 
-    if (editingParentId === null) {
-      // Add New Parent
-      const newParent: ParentCategory = {
-        id: Date.now().toString(),
-        name: modalName,
-        color: modalColor,
-        isActive: true,
-        children: []
-      };
-      setCategories([...categories, newParent]);
-      setExpandedIds(new Set([...expandedIds, newParent.id]));
-      toast.success('Category added');
-    } else if (editingChildId === 'PARENT_EDIT_MODE') {
-      // Edit Parent
-      setCategories(categories.map(c => 
-        c.id === editingParentId 
-          ? { ...c, name: modalName, color: modalColor } 
-          : c
-      ));
-      toast.success('Category updated');
-    } else if (editingChildId === null) {
-      // Add New Child
-      const newChild: ChildCategory = {
-        id: Date.now().toString(),
-        name: modalName,
-        isActive: true
-      };
-      setCategories(categories.map(c => 
-        c.id === editingParentId 
-          ? { ...c, children: [...c.children, newChild] } 
-          : c
-      ));
-      toast.success('Sub-category added');
-    } else {
-      // Edit Child
-      setCategories(categories.map(c => 
-        c.id === editingParentId 
-          ? { 
-              ...c, 
-              children: c.children.map(child => 
-                child.id === editingChildId 
-                  ? { ...child, name: modalName } 
-                  : child
-              ) 
-            } 
-          : c
-      ));
-      toast.success('Sub-category updated');
+    try {
+        if (editingParentId === null) {
+            // Add New Parent
+            await settingsService.createExpenseCategory({
+                name: modalName,
+                color: modalColor,
+                is_active: true,
+                children: []
+            } as any);
+            toast.success('Category added');
+        } else if (editingChildId === 'PARENT_EDIT_MODE') {
+            // Edit Parent
+            await settingsService.updateExpenseCategory(editingParentId, {
+                name: modalName,
+                color: modalColor
+            } as any);
+            toast.success('Category updated');
+        } else if (editingChildId === null) {
+            // Add New Child
+            const parent = categories.find(c => c.id === editingParentId);
+            if (parent) {
+                const newChild: ChildCategory = {
+                    id: Date.now().toString(),
+                    name: modalName,
+                    isActive: true
+                };
+                const updatedChildren = [...parent.children, newChild];
+                await settingsService.updateExpenseCategory(editingParentId, {
+                    children: updatedChildren
+                } as any);
+                toast.success('Sub-category added');
+            }
+        } else {
+            // Edit Child
+            const parent = categories.find(c => c.id === editingParentId);
+            if (parent) {
+                const updatedChildren = parent.children.map(child => 
+                    child.id === editingChildId 
+                        ? { ...child, name: modalName } 
+                        : child
+                );
+                await settingsService.updateExpenseCategory(editingParentId, {
+                    children: updatedChildren
+                } as any);
+                toast.success('Sub-category updated');
+            }
+        }
+        await loadCategories();
+        setIsModalOpen(false);
+    } catch (error) {
+        console.error('Error saving category:', error);
+        toast.error('Failed to save category');
     }
-    setIsModalOpen(false);
   };
 
-  const toggleParentStatus = (id: string) => {
-    setCategories(categories.map(c => 
-      c.id === id ? { ...c, isActive: !c.isActive } : c
-    ));
+  const toggleParentStatus = async (id: string) => {
+    const category = categories.find(c => c.id === id);
+    if (!category) return;
+    try {
+        await settingsService.updateExpenseCategory(id, { is_active: !category.isActive });
+        await loadCategories();
+        toast.success(`Category ${!category.isActive ? 'activated' : 'deactivated'}`);
+    } catch (error) {
+        console.error('Error updating category status:', error);
+        toast.error('Failed to update status');
+    }
   };
 
-  const toggleChildStatus = (parentId: string, childId: string) => {
-    setCategories(categories.map(c => 
-      c.id === parentId 
-        ? { 
-            ...c, 
-            children: c.children.map(child => 
-              child.id === childId ? { ...child, isActive: !child.isActive } : child
-            ) 
-          } 
-        : c
-    ));
+  const toggleChildStatus = async (parentId: string, childId: string) => {
+    const parent = categories.find(c => c.id === parentId);
+    if (!parent) return;
+    
+    try {
+        const updatedChildren = parent.children.map(child => 
+            child.id === childId ? { ...child, isActive: !child.isActive } : child
+        );
+        await settingsService.updateExpenseCategory(parentId, { children: updatedChildren } as any);
+        await loadCategories();
+        toast.success('Sub-category status updated');
+    } catch (error) {
+        console.error('Error updating sub-category status:', error);
+        toast.error('Failed to update status');
+    }
   };
 
   return (
@@ -271,100 +339,107 @@ export default function ExpenseCategorySettings() {
         </button>
       </div>
 
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        <ul className="divide-y divide-gray-200">
-          {categories.map((parent) => (
-            <li key={parent.id} className={`bg-white ${!parent.isActive ? 'opacity-60' : ''}`}>
-              <div className="px-4 py-4 sm:px-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center flex-1 min-w-0">
-                    <button 
-                      onClick={() => toggleExpand(parent.id)}
-                      className="mr-2 text-gray-400 hover:text-gray-600"
-                    >
-                      {expandedIds.has(parent.id) ? (
-                        <ChevronDown className="h-5 w-5" />
-                      ) : (
-                        <ChevronRight className="h-5 w-5" />
-                      )}
-                    </button>
-                    <div 
-                      className="h-4 w-4 rounded-full mr-3 shrink-0" 
-                      style={{ backgroundColor: parent.color }}
-                    />
-                    <div className="flex flex-col">
-                      <p className="text-sm font-medium text-gray-900 truncate flex items-center">
-                        {parent.name}
-                        {!parent.isActive && (
-                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                            Inactive
-                          </span>
+      {loading && categories.length === 0 ? (
+          <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-pink-500 border-t-transparent"></div>
+              <p className="mt-2 text-gray-500">Loading categories...</p>
+          </div>
+      ) : (
+        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+            <ul className="divide-y divide-gray-200">
+            {categories.map((parent) => (
+                <li key={parent.id} className={`bg-white ${!parent.isActive ? 'opacity-60' : ''}`}>
+                <div className="px-4 py-4 sm:px-6">
+                    <div className="flex items-center justify-between">
+                    <div className="flex items-center flex-1 min-w-0">
+                        <button 
+                        onClick={() => toggleExpand(parent.id)}
+                        className="mr-2 text-gray-400 hover:text-gray-600"
+                        >
+                        {expandedIds.has(parent.id) ? (
+                            <ChevronDown className="h-5 w-5" />
+                        ) : (
+                            <ChevronRight className="h-5 w-5" />
                         )}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {parent.children.length} sub-categories
-                      </p>
+                        </button>
+                        <div 
+                        className="h-4 w-4 rounded-full mr-3 shrink-0" 
+                        style={{ backgroundColor: parent.color }}
+                        />
+                        <div className="flex flex-col">
+                        <p className="text-sm font-medium text-gray-900 truncate flex items-center">
+                            {parent.name}
+                            {!parent.isActive && (
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                Inactive
+                            </span>
+                            )}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                            {parent.children.length} sub-categories
+                        </p>
+                        </div>
                     </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => handleAddChild(parent.id)}
-                      className="p-1 text-gray-400 hover:text-pink-600"
-                      title="Add Sub-category"
-                    >
-                      <Plus className="h-5 w-5" />
-                    </button>
-                    <button
-                      onClick={() => handleEditParent(parent)}
-                      className="p-1 text-gray-400 hover:text-indigo-600"
-                      title="Edit Category"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => toggleParentStatus(parent.id)}
-                      className={`p-1 ${parent.isActive ? 'text-green-500 hover:text-red-500' : 'text-gray-300 hover:text-green-500'}`}
-                      title={parent.isActive ? "Deactivate" : "Activate"}
-                    >
-                      {parent.isActive ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
-                
-                {expandedIds.has(parent.id) && (
-                  <div className="mt-4 ml-11 space-y-2 border-l-2 border-gray-100 pl-4">
-                    {parent.children.map((child) => (
-                      <div key={child.id} className={`flex items-center justify-between group ${!child.isActive ? 'opacity-50' : ''}`}>
-                        <div className="flex items-center text-sm text-gray-600">
-                          <Circle className="h-2 w-2 mr-3 text-gray-300 fill-current" />
-                          <span className={!child.isActive ? 'line-through' : ''}>{child.name}</span>
+                    <div className="flex items-center space-x-2">
+                        <button
+                        onClick={() => handleAddChild(parent.id)}
+                        className="p-1 text-gray-400 hover:text-pink-600"
+                        title="Add Sub-category"
+                        >
+                        <Plus className="h-5 w-5" />
+                        </button>
+                        <button
+                        onClick={() => handleEditParent(parent)}
+                        className="p-1 text-gray-400 hover:text-indigo-600"
+                        title="Edit Category"
+                        >
+                        <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                        onClick={() => toggleParentStatus(parent.id)}
+                        className={`p-1 ${parent.isActive ? 'text-green-500 hover:text-red-500' : 'text-gray-300 hover:text-green-500'}`}
+                        title={parent.isActive ? "Deactivate" : "Activate"}
+                        >
+                        {parent.isActive ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+                        </button>
+                    </div>
+                    </div>
+                    
+                    {expandedIds.has(parent.id) && (
+                    <div className="mt-4 ml-11 space-y-2 border-l-2 border-gray-100 pl-4">
+                        {parent.children.map((child) => (
+                        <div key={child.id} className={`flex items-center justify-between group ${!child.isActive ? 'opacity-50' : ''}`}>
+                            <div className="flex items-center text-sm text-gray-600">
+                            <Circle className="h-2 w-2 mr-3 text-gray-300 fill-current" />
+                            <span className={!child.isActive ? 'line-through' : ''}>{child.name}</span>
+                            </div>
+                            <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                                onClick={() => handleEditChild(parent.id, child)}
+                                className="text-xs text-indigo-600 hover:text-indigo-900"
+                            >
+                                Edit
+                            </button>
+                            <button
+                                onClick={() => toggleChildStatus(parent.id, child.id)}
+                                className={`text-xs ${child.isActive ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}`}
+                            >
+                                {child.isActive ? 'Disable' : 'Enable'}
+                            </button>
+                            </div>
                         </div>
-                        <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => handleEditChild(parent.id, child)}
-                            className="text-xs text-indigo-600 hover:text-indigo-900"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => toggleChildStatus(parent.id, child.id)}
-                            className={`text-xs ${child.isActive ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}`}
-                          >
-                            {child.isActive ? 'Disable' : 'Enable'}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {parent.children.length === 0 && (
-                      <p className="text-xs text-gray-400 italic">No sub-categories yet.</p>
+                        ))}
+                        {parent.children.length === 0 && (
+                        <p className="text-xs text-gray-400 italic">No sub-categories yet.</p>
+                        )}
+                    </div>
                     )}
-                  </div>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
+                </div>
+                </li>
+            ))}
+            </ul>
+        </div>
+      )}
 
       {/* Edit/Add Modal */}
       {isModalOpen && (

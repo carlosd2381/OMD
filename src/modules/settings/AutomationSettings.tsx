@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Zap, 
   Plus, 
@@ -12,60 +12,8 @@ import {
   Settings,
   Save
 } from 'lucide-react';
-
-// Types
-interface WorkflowAction {
-  id: string;
-  type: 'send_email' | 'create_task' | 'update_status' | 'webhook';
-  config: Record<string, any>;
-}
-
-interface Workflow {
-  id: string;
-  name: string;
-  active: boolean;
-  trigger: string;
-  actions: WorkflowAction[];
-}
-
-interface ExecutionLog {
-  id: string;
-  workflowId: string;
-  workflowName: string;
-  triggeredAt: string;
-  status: 'success' | 'failed';
-  details: string;
-}
-
-// Mock Data
-const MOCK_WORKFLOWS: Workflow[] = [
-  {
-    id: '1',
-    name: 'New Lead Welcome',
-    active: true,
-    trigger: 'lead_created',
-    actions: [
-      { id: 'a1', type: 'send_email', config: { templateId: 'welcome_email', to: 'lead' } },
-      { id: 'a2', type: 'create_task', config: { title: 'Follow up call', dueInDays: 2 } }
-    ]
-  },
-  {
-    id: '2',
-    name: 'Payment Received Notification',
-    active: true,
-    trigger: 'invoice_paid',
-    actions: [
-      { id: 'a3', type: 'send_email', config: { templateId: 'payment_receipt', to: 'client' } },
-      { id: 'a4', type: 'update_status', config: { entity: 'invoice', status: 'paid' } }
-    ]
-  }
-];
-
-const MOCK_LOGS: ExecutionLog[] = [
-  { id: 'l1', workflowId: '1', workflowName: 'New Lead Welcome', triggeredAt: '2024-03-10 09:30 AM', status: 'success', details: 'Email sent to john@example.com' },
-  { id: 'l2', workflowId: '1', workflowName: 'New Lead Welcome', triggeredAt: '2024-03-09 02:15 PM', status: 'failed', details: 'SMTP Error: Connection timeout' },
-  { id: 'l3', workflowId: '2', workflowName: 'Payment Received Notification', triggeredAt: '2024-03-08 11:00 AM', status: 'success', details: 'All actions completed' },
-];
+import toast from 'react-hot-toast';
+import { automationService, type Workflow, type ExecutionLog, type WorkflowAction } from '../../services/automationService';
 
 const TRIGGERS = [
   { value: 'lead_created', label: 'New Lead Created' },
@@ -85,14 +33,33 @@ const ACTION_TYPES = [
 
 export default function AutomationSettings() {
   const [activeTab, setActiveTab] = useState<'workflows' | 'logs'>('workflows');
-  const [workflows, setWorkflows] = useState<Workflow[]>(MOCK_WORKFLOWS);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [logs, setLogs] = useState<ExecutionLog[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [currentWorkflow, setCurrentWorkflow] = useState<Workflow | null>(null);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [workflowsData, logsData] = await Promise.all([
+        automationService.getWorkflows(),
+        automationService.getLogs()
+      ]);
+      setWorkflows(workflowsData);
+      setLogs(logsData);
+    } catch (error) {
+      console.error('Error loading automation data:', error);
+      toast.error('Failed to load automation data');
+    }
+  };
 
   // Editor State
   const handleCreateNew = () => {
     setCurrentWorkflow({
-      id: Date.now().toString(),
+      id: `temp_${Date.now()}`,
       name: 'New Workflow',
       active: true,
       trigger: 'lead_created',
@@ -106,18 +73,32 @@ export default function AutomationSettings() {
     setIsEditing(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!currentWorkflow) return;
-    
-    setWorkflows(prev => {
-      const exists = prev.find(w => w.id === currentWorkflow.id);
-      if (exists) {
-        return prev.map(w => w.id === currentWorkflow.id ? currentWorkflow : w);
-      }
-      return [...prev, currentWorkflow];
-    });
-    setIsEditing(false);
-    setCurrentWorkflow(null);
+    try {
+      await automationService.saveWorkflow(currentWorkflow);
+      toast.success('Workflow saved');
+      setIsEditing(false);
+      setCurrentWorkflow(null);
+      loadData();
+    } catch (error) {
+      console.error('Error saving workflow:', error);
+      toast.error('Failed to save workflow');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this workflow?')) return;
+    try {
+      await automationService.deleteWorkflow(id);
+      toast.success('Workflow deleted');
+      setIsEditing(false);
+      setCurrentWorkflow(null);
+      loadData();
+    } catch (error) {
+      console.error('Error deleting workflow:', error);
+      toast.error('Failed to delete workflow');
+    }
   };
 
   const addAction = () => {
@@ -247,10 +228,18 @@ export default function AutomationSettings() {
               <ArrowRight className="h-6 w-6 transform rotate-180" />
             </button>
             <h2 className="text-2xl font-bold text-gray-900">
-              {currentWorkflow.id ? 'Edit Workflow' : 'New Workflow'}
+              {currentWorkflow.id && !currentWorkflow.id.startsWith('temp_') ? 'Edit Workflow' : 'New Workflow'}
             </h2>
           </div>
           <div className="flex space-x-3">
+            {currentWorkflow.id && !currentWorkflow.id.startsWith('temp_') && (
+              <button
+                onClick={() => handleDelete(currentWorkflow.id)}
+                className="px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50"
+              >
+                Delete
+              </button>
+            )}
             <button
               onClick={() => setIsEditing(false)}
               className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
@@ -470,7 +459,7 @@ export default function AutomationSettings() {
       ) : (
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <ul className="divide-y divide-gray-200">
-            {MOCK_LOGS.map((log) => (
+            {logs.map((log) => (
               <li key={log.id}>
                 <div className="px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between">

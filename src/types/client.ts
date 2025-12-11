@@ -11,6 +11,7 @@ export interface Client {
   zip_code?: string;
   country?: string;
   role?: 'Bride' | 'Groom' | 'Parent' | 'External Planner' | 'Hotel/Resort' | 'Private Venue';
+  relationship?: string; // e.g. "Mother of the Bride"
   type?: 'Direct' | 'Preferred Vendor';
   lead_source?: 'Website' | 'Facebook' | 'Facebook Group' | 'Instagram' | 'TikTok' | 'External Planner' | 'Hotel/Venue' | 'Hotel/Venue PV' | 'Vendor Referral' | 'Client Referral' | 'Other';
   instagram?: string;

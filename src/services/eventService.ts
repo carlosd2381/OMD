@@ -1,70 +1,92 @@
+import { supabase } from '../lib/supabase';
 import type { Event } from '../types/event';
-
-const MOCK_EVENTS: Event[] = [
-  {
-    id: '1',
-    name: 'Gonzalez Wedding',
-    date: '2024-06-15',
-    client_id: '1',
-    venue_id: '1',
-    status: 'confirmed',
-    guest_count: 150,
-    budget: 50000,
-    notes: 'Outdoor ceremony',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    name: 'Corporate Gala',
-    date: '2024-09-20',
-    client_id: '2',
-    venue_id: '2',
-    status: 'inquiry',
-    guest_count: 300,
-    budget: 100000,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
 
 export const eventService = {
   async getEvents(): Promise<Event[]> {
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(MOCK_EVENTS), 500);
-    });
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .order('date', { ascending: true });
+
+    if (error) throw error;
+
+    return (data || []).map(mapToEvent);
   },
 
-  async getEvent(id: string): Promise<Event | undefined> {
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(MOCK_EVENTS.find(e => e.id === id)), 500);
-    });
+  async getEvent(id: string): Promise<Event | null> {
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return mapToEvent(data);
   },
 
   async createEvent(event: Omit<Event, 'id' | 'created_at' | 'updated_at'>): Promise<Event> {
-    const newEvent: Event = {
-      ...event,
-      id: Math.random().toString(36).substr(2, 9),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    MOCK_EVENTS.push(newEvent);
-    return new Promise((resolve) => setTimeout(() => resolve(newEvent), 500));
+    const { data, error } = await supabase
+      .from('events')
+      .insert({
+        name: event.name,
+        date: event.date,
+        client_id: event.client_id,
+        secondary_client_id: event.secondary_client_id,
+        venue_id: event.venue_id,
+        venue_name: event.venue_name,
+        planner_id: event.planner_id,
+        status: event.status,
+        guest_count: event.guest_count,
+        budget: event.budget,
+        services: event.services,
+        notes: event.notes
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return mapToEvent(data);
   },
 
   async updateEvent(id: string, updates: Partial<Event>): Promise<Event> {
-    const index = MOCK_EVENTS.findIndex(e => e.id === id);
-    if (index === -1) throw new Error('Event not found');
-    
-    MOCK_EVENTS[index] = { ...MOCK_EVENTS[index], ...updates, updated_at: new Date().toISOString() };
-    return new Promise((resolve) => setTimeout(() => resolve(MOCK_EVENTS[index]), 500));
+    const { data, error } = await supabase
+      .from('events')
+      .update({
+        ...updates,
+        // updated_at: new Date().toISOString() // TODO: Add updated_at column to DB
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return mapToEvent(data);
   },
 
   async deleteEvent(id: string): Promise<void> {
-    const index = MOCK_EVENTS.findIndex(e => e.id === id);
-    if (index !== -1) {
-      MOCK_EVENTS.splice(index, 1);
-    }
-    return new Promise((resolve) => setTimeout(() => resolve(), 500));
+    const { error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
   }
 };
+
+// Helper to map DB result to Event type
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapToEvent(data: any): Event {
+  return {
+    ...data,
+    venue_id: data.venue_id || undefined,
+    planner_id: data.planner_id || undefined,
+    guest_count: data.guest_count || undefined,
+    budget: data.budget || undefined,
+    notes: data.notes || undefined,
+    updated_at: data.created_at // Fallback
+  };
+}

@@ -10,6 +10,7 @@ export default function LeadList() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'active' | 'converted' | 'archived'>('active');
 
   useEffect(() => {
     loadLeads();
@@ -49,11 +50,22 @@ export default function LeadList() {
     }
   };
 
-  const filteredLeads = leads.filter(lead =>
-    lead.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lead.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lead.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredLeads = leads.filter(lead => {
+    const matchesSearch = 
+      lead.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lead.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lead.email.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (activeTab === 'active') {
+      return lead.status !== 'Converted' && lead.status !== 'Lost';
+    } else if (activeTab === 'converted') {
+      return lead.status === 'Converted';
+    } else { // archived
+      return lead.status === 'Lost';
+    }
+  });
 
   if (loading) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
@@ -81,6 +93,41 @@ export default function LeadList() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
+      </div>
+
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          <button
+            onClick={() => setActiveTab('active')}
+            className={`${
+              activeTab === 'active'
+                ? 'border-pink-500 text-pink-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            Active Leads
+          </button>
+          <button
+            onClick={() => setActiveTab('converted')}
+            className={`${
+              activeTab === 'converted'
+                ? 'border-pink-500 text-pink-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            Converted
+          </button>
+          <button
+            onClick={() => setActiveTab('archived')}
+            className={`${
+              activeTab === 'archived'
+                ? 'border-pink-500 text-pink-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+          >
+            Lost / Archived
+          </button>
+        </nav>
       </div>
 
       <div className="bg-white shadow overflow-hidden sm:rounded-md">

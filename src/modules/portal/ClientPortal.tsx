@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { FileText, CheckSquare, PenTool, DollarSign, Star, Layout, Lock } from 'lucide-react';
+import { FileText, CheckSquare, PenTool, DollarSign, Star, Layout, Lock, Download, ClipboardList, CreditCard, CheckCircle, ArrowRight } from 'lucide-react';
 import { portalService } from '../../services/portalService';
+import { clientService } from '../../services/clientService';
+import { settingsService, type BrandingSettings } from '../../services/settingsService';
+import { pdf } from '@react-pdf/renderer';
+import { QuotePDF } from '../quotes/QuotePDF';
 import type { Quote } from '../../types/quote';
+import type { Client } from '../../types/client';
 import type { Questionnaire } from '../../types/questionnaire';
 import type { Contract } from '../../types/contract';
 import type { Invoice } from '../../types/invoice';
@@ -16,6 +21,10 @@ export default function ClientPortal() {
   const [activeTab, setActiveTab] = useState<PortalTab>('overview');
   const [loading, setLoading] = useState(true);
   
+  const [client, setClient] = useState<Client | null>(null);
+  const [branding, setBranding] = useState<BrandingSettings | null>(null);
+  const [quotePrefix, setQuotePrefix] = useState('QTE');
+
   const [quote, setQuote] = useState<Quote | undefined>();
   const [questionnaire, setQuestionnaire] = useState<Questionnaire | undefined>();
   const [contract, setContract] = useState<Contract | undefined>();
@@ -33,13 +42,26 @@ export default function ClientPortal() {
 
   const loadPortalData = async (id: string) => {
     try {
-      const data = await portalService.getPortalStatus(id);
-      setQuote(data.quote);
-      setQuestionnaire(data.questionnaire);
-      setContract(data.contract);
-      setInvoice(data.invoice);
-      // setReview(data.review);
+      const [portalData, clientData, brandingData, financialSettings] = await Promise.all([
+        portalService.getPortalStatus(id),
+        clientService.getClient(id),
+        settingsService.getBrandingSettings(),
+        settingsService.getFinancialSettings(),
+      ]);
+
+      setQuote(portalData.quote);
+      setQuestionnaire(portalData.questionnaire);
+      setContract(portalData.contract);
+      setInvoice(portalData.invoice);
+      // setReview(portalData.review);
+      
+      setClient(clientData);
+      setBranding(brandingData);
+      if (financialSettings?.quote_sequence_prefix) {
+        setQuotePrefix(financialSettings.quote_sequence_prefix);
+      }
     } catch (error) {
+      console.error('Error loading portal data:', error);
       toast.error('Failed to load portal data');
     } finally {
       setLoading(false);
@@ -71,6 +93,48 @@ export default function ClientPortal() {
   };
 
   // Simulation handlers
+  const handleDownloadQuote = async () => {
+    if (!quote || !client) return;
+
+    const subtotal = quote.items.reduce((sum, item) => sum + item.total, 0);
+    const tax = quote.total_amount - subtotal;
+    
+    // Generate quote number
+    const date = new Date(quote.created_at);
+    const dateStr = `${date.getFullYear().toString().substr(-2)}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+    const quoteNumber = `${quotePrefix}-${dateStr}-001`;
+
+    try {
+      const blob = await pdf(
+        <QuotePDF
+          quote={quote}
+          client={client}
+          branding={branding}
+          items={quote.items}
+          totals={{
+            subtotal,
+            tax,
+            total: quote.total_amount
+          }}
+          quoteNumber={quoteNumber}
+        />
+      ).toBlob();
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Quote_${quoteNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success('Quote PDF downloaded');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF');
+    }
+  };
+
   const handleAcceptQuote = async () => {
     if (!quote) return;
     await portalService.acceptQuote(quote.id);
@@ -206,120 +270,356 @@ export default function ClientPortal() {
 
               {activeTab === 'quotes' && (
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Your Quote</h3>
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-medium text-gray-900">Your Quote</h3>
+                    <div className="flex space-x-3">
+                      {quote && (
+                        <button
+                          onClick={handleDownloadQuote}
+                          className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Download PDF
+                        </button>
+                      )}
+                      {quote && quote.status !== 'accepted' && (
+                        <button
+                          onClick={handleAcceptQuote}
+                          className="bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700 shadow-sm text-sm font-medium"
+                        >
+                          Accept Quote
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  
                   {quote ? (
-                    <div className="border rounded-md p-4">
-                      <div className="flex justify-between mb-4">
-                        <span className="font-medium">Total Amount:</span>
-                        <span className="text-xl font-bold">${quote.total_amount}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                      {/* Header */}
+                      <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <div>
+                          <span className="text-sm text-gray-500 block">Total Amount</span>
+                          <span className="text-2xl font-bold text-gray-900">
+                            ${quote.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {quote.currency}
+                          </span>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
                           quote.status === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                         }`}>
-                          Status: {quote.status.toUpperCase()}
+                          {quote.status}
                         </span>
-                        {quote.status !== 'accepted' && (
-                          <button
-                            onClick={handleAcceptQuote}
-                            className="bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700"
-                          >
-                            Accept Quote
-                          </button>
-                        )}
+                      </div>
+
+                      {/* Line Items */}
+                      <div className="px-6 py-6">
+                        <h4 className="text-sm font-medium text-gray-900 mb-4 uppercase tracking-wider">Line Items</h4>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead>
+                              <tr>
+                                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {quote.items.map((item, index) => (
+                                <tr key={index}>
+                                  <td className="px-3 py-4 text-sm text-gray-900">{item.description}</td>
+                                  <td className="px-3 py-4 text-sm text-gray-500 text-right">{item.quantity}</td>
+                                  <td className="px-3 py-4 text-sm text-gray-500 text-right">
+                                    ${item.unit_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-3 py-4 text-sm font-medium text-gray-900 text-right">
+                                    ${item.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot className="bg-gray-50">
+                              <tr>
+                                <td colSpan={3} className="px-3 py-2 text-sm font-medium text-gray-500 text-right pt-4">Subtotal:</td>
+                                <td className="px-3 py-2 text-sm text-gray-900 text-right pt-4">
+                                  ${quote.items.reduce((sum, item) => sum + item.total, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                              
+                              {quote.taxes && quote.taxes.length > 0 ? (
+                                quote.taxes.map((tax, index) => (
+                                  <tr key={index}>
+                                    <td colSpan={3} className="px-3 py-2 text-sm font-medium text-gray-500 text-right">
+                                      {tax.name} ({tax.rate}%):
+                                    </td>
+                                    <td className={`px-3 py-2 text-sm text-right ${tax.is_retention ? 'text-red-600' : 'text-gray-900'}`}>
+                                      {tax.is_retention ? '-' : ''}${tax.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                ))
+                              ) : (
+                                // Fallback for legacy quotes without detailed tax info
+                                (quote.total_amount - quote.items.reduce((sum, item) => sum + item.total, 0)) > 0 && (
+                                  <tr>
+                                    <td colSpan={3} className="px-3 py-2 text-sm font-medium text-gray-500 text-right">Tax:</td>
+                                    <td className="px-3 py-2 text-sm text-gray-900 text-right">
+                                      ${(quote.total_amount - quote.items.reduce((sum, item) => sum + item.total, 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                )
+                              )}
+
+                              <tr>
+                                <td colSpan={3} className="px-3 py-4 text-sm font-bold text-gray-900 text-right border-t border-gray-200">Total:</td>
+                                <td className="px-3 py-4 text-sm font-bold text-gray-900 text-right border-t border-gray-200">
+                                  ${quote.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-gray-500">No quote available.</p>
+                    <div className="text-center py-12 bg-white rounded-lg border border-gray-200 border-dashed">
+                      <DollarSign className="mx-auto h-12 w-12 text-gray-300" />
+                      <h3 className="mt-2 text-sm font-medium text-gray-900">No quote available</h3>
+                      <p className="mt-1 text-sm text-gray-500">There are no active quotes for your event at this time.</p>
+                    </div>
                   )}
                 </div>
               )}
 
               {activeTab === 'questionnaires' && (
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Event Questionnaire</h3>
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-medium text-gray-900">Event Questionnaire</h3>
+                  </div>
+
                   {questionnaire ? (
-                    <div className="border rounded-md p-4">
-                      <p className="mb-4">{questionnaire.title}</p>
-                      <div className="flex justify-between items-center">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+                      <div className="p-6 border-b bg-gray-50 flex justify-between items-center">
+                        <div>
+                          <h4 className="text-lg font-medium text-gray-900">{questionnaire.title}</h4>
+                          <p className="text-sm text-gray-500 mt-1">Please complete this form to help us plan your event.</p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
                           questionnaire.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
                         }`}>
-                          Status: {questionnaire.status.toUpperCase()}
+                          {questionnaire.status}
                         </span>
-                        {questionnaire.status !== 'completed' && (
+                      </div>
+                      
+                      <div className="p-8 text-center">
+                        <div className="mx-auto h-24 w-24 bg-pink-50 rounded-full flex items-center justify-center mb-4">
+                          <ClipboardList className="h-12 w-12 text-pink-600" />
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">
+                          {questionnaire.status === 'completed' ? 'Thank You!' : 'Action Required'}
+                        </h3>
+                        <p className="text-gray-500 max-w-md mx-auto mb-6">
+                          {questionnaire.status === 'completed' 
+                            ? 'You have successfully submitted this questionnaire. We will review your answers shortly.' 
+                            : 'We need a few more details about your event. Please take a moment to fill out this questionnaire.'}
+                        </p>
+                        
+                        {questionnaire.status !== 'completed' ? (
                           <button
                             onClick={handleCompleteQuestionnaire}
-                            className="bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700"
+                            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
                           >
-                            Submit Questionnaire
+                            Start Questionnaire
+                            <ArrowRight className="ml-2 h-5 w-5" />
+                          </button>
+                        ) : (
+                          <button
+                            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                          >
+                            View Responses
                           </button>
                         )}
                       </div>
                     </div>
                   ) : (
-                    <p className="text-gray-500">No questionnaire assigned.</p>
+                    <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                      <ClipboardList className="mx-auto h-12 w-12 text-gray-400" />
+                      <h3 className="mt-2 text-sm font-medium text-gray-900">No questionnaire</h3>
+                      <p className="mt-1 text-sm text-gray-500">There are no questionnaires assigned to this event yet.</p>
+                    </div>
                   )}
                 </div>
               )}
 
               {activeTab === 'contracts' && (
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Service Contract</h3>
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-medium text-gray-900">Service Contract</h3>
+                    {contract && (
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
+                        contract.status === 'signed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {contract.status}
+                      </span>
+                    )}
+                  </div>
+                  
                   {contract ? (
-                    <div className="border rounded-md p-4">
-                      <div className="bg-gray-50 p-4 mb-4 rounded text-sm font-mono">
-                        {contract.content}
+                    <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+                      {/* Contract Header */}
+                      <div className="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
+                        <div>
+                          <p className="text-sm text-gray-500">Contract ID</p>
+                          <p className="font-mono text-sm font-medium">{contract.id.slice(0, 8)}</p>
+                        </div>
+                        {contract.signed_at && (
+                          <div className="text-right">
+                            <p className="text-sm text-gray-500">Signed On</p>
+                            <p className="text-sm font-medium">{new Date(contract.signed_at).toLocaleDateString()}</p>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex justify-between items-center">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          contract.status === 'signed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          Status: {contract.status.toUpperCase()}
-                        </span>
-                        {contract.status !== 'signed' && (
+
+                      {/* Contract Content */}
+                      <div className="p-8 bg-white min-h-[400px] prose max-w-none">
+                        <div dangerouslySetInnerHTML={{ __html: contract.content }} />
+                      </div>
+
+                      {/* Contract Actions */}
+                      <div className="bg-gray-50 px-6 py-4 border-t flex justify-end">
+                        {contract.status !== 'signed' ? (
                           <button
                             onClick={handleSignContract}
-                            className="bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700"
+                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
                           >
+                            <CheckCircle className="h-4 w-4 mr-2" />
                             Sign Contract
+                          </button>
+                        ) : (
+                          <button
+                            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                            onClick={() => window.print()}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download PDF
                           </button>
                         )}
                       </div>
                     </div>
                   ) : (
-                    <p className="text-gray-500">No contract generated yet.</p>
+                    <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                      <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                      <h3 className="mt-2 text-sm font-medium text-gray-900">No contract generated</h3>
+                      <p className="mt-1 text-sm text-gray-500">The contract for this event hasn't been created yet.</p>
+                    </div>
                   )}
                 </div>
               )}
 
               {activeTab === 'invoices' && (
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Invoices</h3>
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-medium text-gray-900">Invoices</h3>
+                  </div>
+
                   {invoice ? (
-                    <div className="border rounded-md p-4">
-                      <div className="flex justify-between mb-2">
-                        <span>Invoice #{invoice.invoice_number}</span>
-                        <span className="font-bold">${invoice.total_amount}</span>
+                    <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
+                      {/* Invoice Header */}
+                      <div className="p-6 border-b flex justify-between items-start bg-gray-50">
+                        <div>
+                          <h2 className="text-2xl font-bold text-gray-900">INVOICE</h2>
+                          <p className="text-sm text-gray-500 mt-1">#{invoice.invoice_number}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
+                            invoice.status === 'paid' ? 'bg-green-100 text-green-800' : 
+                            invoice.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {invoice.status}
+                          </span>
+                          <p className="text-sm text-gray-500 mt-2">
+                            Due Date: <span className="font-medium text-gray-900">{new Date(invoice.due_date).toLocaleDateString()}</span>
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center mt-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          invoice.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          Status: {invoice.status.toUpperCase()}
-                        </span>
-                        {invoice.status !== 'paid' && (
+
+                      {/* Invoice Details */}
+                      <div className="p-6">
+                        <div className="mb-8">
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Bill To</h4>
+                          <div className="text-sm text-gray-900">
+                            <p className="font-medium">{client?.first_name} {client?.last_name}</p>
+                            <p>{client?.email}</p>
+                            <p>{client?.phone}</p>
+                          </div>
+                        </div>
+
+                        {/* Line Items */}
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead>
+                              <tr>
+                                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {invoice.items && invoice.items.length > 0 ? (
+                                invoice.items.map((item, index) => (
+                                  <tr key={index}>
+                                    <td className="px-3 py-4 text-sm text-gray-900">{item.description}</td>
+                                    <td className="px-3 py-4 text-sm text-gray-900 text-right">
+                                      ${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td className="px-3 py-4 text-sm text-gray-900">Invoice Services</td>
+                                  <td className="px-3 py-4 text-sm text-gray-900 text-right">
+                                    ${invoice.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                            <tfoot>
+                              <tr>
+                                <td className="px-3 py-4 text-sm font-bold text-gray-900 text-right">Total</td>
+                                <td className="px-3 py-4 text-sm font-bold text-gray-900 text-right">
+                                  ${invoice.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Invoice Actions */}
+                      <div className="bg-gray-50 px-6 py-4 border-t flex justify-end">
+                        {invoice.status !== 'paid' ? (
                           <button
                             onClick={handlePayInvoice}
-                            className="bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700"
+                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
                           >
+                            <CreditCard className="h-4 w-4 mr-2" />
                             Pay Now
+                          </button>
+                        ) : (
+                          <button
+                            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                            onClick={() => window.print()}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download Receipt
                           </button>
                         )}
                       </div>
                     </div>
                   ) : (
-                    <p className="text-gray-500">No invoices available.</p>
+                    <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                      <CreditCard className="mx-auto h-12 w-12 text-gray-400" />
+                      <h3 className="mt-2 text-sm font-medium text-gray-900">No invoices</h3>
+                      <p className="mt-1 text-sm text-gray-500">There are no invoices available for this event.</p>
+                    </div>
                   )}
                 </div>
               )}

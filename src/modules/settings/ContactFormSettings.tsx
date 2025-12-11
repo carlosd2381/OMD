@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Copy, Code, Settings, GripVertical, Check, ExternalLink, Eye } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Copy, Code, Settings, GripVertical, ExternalLink, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { settingsService } from '../../services/settingsService';
 
 type FieldType = 'text' | 'email' | 'phone' | 'textarea' | 'date' | 'select' | 'checkbox';
 
@@ -31,39 +32,141 @@ interface ContactForm {
 export default function ContactFormSettings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'editor' | 'settings' | 'embed'>('editor');
-  const [selectedFormId, setSelectedFormId] = useState<string>('1');
+  const [selectedFormId, setSelectedFormId] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [forms, setForms] = useState<ContactForm[]>([]);
 
-  // Mock Data
-  const [forms, setForms] = useState<ContactForm[]>([
-    {
-      id: '1',
-      name: 'General Inquiry',
-      fields: [
-        { id: 'f1', type: 'text', label: 'Full Name', placeholder: 'Jane Doe', required: true },
-        { id: 'f2', type: 'email', label: 'Email Address', placeholder: 'jane@example.com', required: true },
-        { id: 'f3', type: 'phone', label: 'Phone Number', placeholder: '+52...', required: false },
-        { id: 'f4', type: 'date', label: 'Event Date', required: true },
-        { id: 'f5', type: 'select', label: 'Event Type', required: true, options: ['Wedding', 'Corporate', 'Birthday', 'Other'] },
-        { id: 'f6', type: 'textarea', label: 'Message', placeholder: 'Tell us about your event...', required: true },
-      ],
-      settings: {
-        successAction: 'message',
-        successMessage: 'Thank you for your inquiry! We will be in touch shortly.',
-        redirectUrl: '',
-        notifyEmail: 'info@omd-events.com',
-        spamProtection: true,
-        sourceTracking: true,
+  useEffect(() => {
+    loadForms();
+  }, []);
+
+  const loadForms = async () => {
+    setLoading(true);
+    try {
+      const data = await settingsService.getContactForms();
+      const mapped: ContactForm[] = data.map(item => ({
+        id: item.id,
+        name: item.name,
+        fields: (item.fields as any[]) || [],
+        settings: (item.settings as any) || {
+            successAction: 'message',
+            successMessage: 'Thank you for your inquiry!',
+            redirectUrl: '',
+            notifyEmail: '',
+            spamProtection: true,
+            sourceTracking: true
+        }
+      }));
+      
+      if (mapped.length === 0) {
+          // Create a default form in memory if none exist
+          const defaultForm: ContactForm = {
+              id: 'new_default',
+              name: 'General Inquiry',
+              fields: [
+                { id: 'f1', type: 'text', label: 'Full Name', placeholder: 'Jane Doe', required: true },
+                { id: 'f2', type: 'email', label: 'Email Address', placeholder: 'jane@example.com', required: true },
+                { id: 'f6', type: 'textarea', label: 'Message', placeholder: 'Tell us about your event...', required: true },
+              ],
+              settings: {
+                successAction: 'message',
+                successMessage: 'Thank you for your inquiry! We will be in touch shortly.',
+                redirectUrl: '',
+                notifyEmail: '',
+                spamProtection: true,
+                sourceTracking: true,
+              }
+          };
+          setForms([defaultForm]);
+          setSelectedFormId(defaultForm.id);
+      } else {
+          setForms(mapped);
+          if (!selectedFormId || !mapped.find(f => f.id === selectedFormId)) {
+              setSelectedFormId(mapped[0].id);
+          }
       }
+    } catch (error) {
+      console.error('Error loading contact forms:', error);
+      toast.error('Failed to load contact forms');
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const currentForm = forms.find(f => f.id === selectedFormId) || forms[0];
 
-  const handleSave = () => {
-    toast.success('Form saved successfully');
+  const handleSave = async () => {
+    if (!currentForm) return;
+    setLoading(true);
+    try {
+        const payload = {
+            name: currentForm.name,
+            fields: currentForm.fields,
+            settings: currentForm.settings
+        };
+
+        if (currentForm.id.startsWith('new_')) {
+            const newForm = await settingsService.createContactForm(payload as any);
+            toast.success('Form created successfully');
+            // Reload to get the real ID
+            await loadForms();
+            setSelectedFormId(newForm.id);
+        } else {
+            await settingsService.updateContactForm(currentForm.id, payload as any);
+            toast.success('Form saved successfully');
+        }
+    } catch (error) {
+        console.error('Error saving form:', error);
+        toast.error('Failed to save form');
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleCreateNew = () => {
+      const newForm: ContactForm = {
+          id: 'new_' + Date.now(),
+          name: 'New Form',
+          fields: [],
+          settings: {
+            successAction: 'message',
+            successMessage: 'Thank you!',
+            redirectUrl: '',
+            notifyEmail: '',
+            spamProtection: true,
+            sourceTracking: true,
+          }
+      };
+      setForms([...forms, newForm]);
+      setSelectedFormId(newForm.id);
+      setActiveTab('settings'); // Go to settings to name it
+  };
+
+  const handleDelete = async () => {
+      if (!currentForm) return;
+      if (confirm(`Are you sure you want to delete "${currentForm.name}"?`)) {
+          try {
+              if (!currentForm.id.startsWith('new_')) {
+                  await settingsService.deleteContactForm(currentForm.id);
+              }
+              const remaining = forms.filter(f => f.id !== currentForm.id);
+              setForms(remaining);
+              if (remaining.length > 0) {
+                  setSelectedFormId(remaining[0].id);
+              } else {
+                  // If no forms left, reload to trigger default creation or empty state
+                  loadForms();
+              }
+              toast.success('Form deleted');
+          } catch (error) {
+              console.error('Error deleting form:', error);
+              toast.error('Failed to delete form');
+          }
+      }
   };
 
   const addField = (type: FieldType) => {
+    if (!currentForm) return;
     const newField: FormField = {
       id: Date.now().toString(),
       type,
@@ -76,6 +179,7 @@ export default function ContactFormSettings() {
   };
 
   const removeField = (fieldId: string) => {
+    if (!currentForm) return;
     updateFormFields(currentForm.fields.filter(f => f.id !== fieldId));
   };
 
@@ -84,6 +188,7 @@ export default function ContactFormSettings() {
   };
 
   const updateField = (fieldId: string, updates: Partial<FormField>) => {
+    if (!currentForm) return;
     const newFields = currentForm.fields.map(f => f.id === fieldId ? { ...f, ...updates } : f);
     updateFormFields(newFields);
   };
@@ -93,10 +198,15 @@ export default function ContactFormSettings() {
   };
 
   const copyEmbedCode = () => {
+    if (!currentForm) return;
     const code = `<script src="https://api.omd-crm.com/forms/embed/${currentForm.id}.js"></script>`;
     navigator.clipboard.writeText(code);
     toast.success('Embed code copied to clipboard');
   };
+
+  if (!currentForm && !loading) {
+      return <div>Loading...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -123,10 +233,25 @@ export default function ContactFormSettings() {
             {forms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
           <button
-            onClick={handleSave}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700"
+            onClick={handleCreateNew}
+            className="p-2 text-gray-400 hover:text-gray-600"
+            title="Create New Form"
           >
-            Save Changes
+              <Plus className="h-5 w-5" />
+          </button>
+          <button
+            onClick={handleDelete}
+            className="p-2 text-red-400 hover:text-red-600"
+            title="Delete Form"
+          >
+              <Trash2 className="h-5 w-5" />
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={loading}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 disabled:opacity-50"
+          >
+            {loading ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
@@ -174,11 +299,11 @@ export default function ContactFormSettings() {
       <div className="bg-white shadow sm:rounded-lg p-6 min-h-[500px]">
         
         {/* Editor Tab */}
-        {activeTab === 'editor' && (
+        {activeTab === 'editor' && currentForm && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Field List (Left) */}
             <div className="lg:col-span-2 space-y-4">
-              {currentForm.fields.map((field, index) => (
+              {currentForm.fields.map((field) => (
                 <div key={field.id} className="group relative bg-white border border-gray-200 rounded-lg p-4 hover:border-pink-300 transition-colors">
                   <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-2">
                     <button onClick={() => removeField(field.id)} className="text-red-400 hover:text-red-600">
@@ -284,8 +409,21 @@ export default function ContactFormSettings() {
         )}
 
         {/* Settings Tab */}
-        {activeTab === 'settings' && (
+        {activeTab === 'settings' && currentForm && (
           <div className="max-w-2xl space-y-8">
+            <div>
+                <h3 className="text-lg font-medium text-gray-900">Form Details</h3>
+                <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700">Form Name</label>
+                    <input
+                        type="text"
+                        value={currentForm.name}
+                        onChange={(e) => setForms(forms.map(f => f.id === selectedFormId ? { ...f, name: e.target.value } : f))}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                    />
+                </div>
+            </div>
+
             <div>
               <h3 className="text-lg font-medium text-gray-900">Submission Actions</h3>
               <div className="mt-4 space-y-4">
@@ -380,7 +518,7 @@ export default function ContactFormSettings() {
         )}
 
         {/* Embed Tab */}
-        {activeTab === 'embed' && (
+        {activeTab === 'embed' && currentForm && (
           <div className="space-y-6">
             <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
               <div className="flex justify-between items-center mb-2">

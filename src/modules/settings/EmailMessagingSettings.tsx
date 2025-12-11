@@ -1,21 +1,23 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, Mail, MessageSquare, Bell, Facebook, Instagram, Server, User, Smartphone } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { settingsService } from '../../services/settingsService';
 
 export default function EmailMessagingSettings() {
   const [activeTab, setActiveTab] = useState('email');
+  const [loading, setLoading] = useState(false);
   
-  // Mock state for form fields
   const [smtpSettings, setSmtpSettings] = useState({
-    host: 'smtp.example.com',
-    port: '587',
+    host: '',
+    port: '',
     username: '',
     password: '',
     secure: false,
-    fromName: 'My Company',
-    replyTo: 'support@example.com'
+    fromName: '',
+    replyTo: ''
   });
 
-  const [signature, setSignature] = useState('Best regards,\n\nThe Team');
+  const [signature, setSignature] = useState('');
   
   const [notifications, setNotifications] = useState({
     newLead: { email: true, inApp: true, sms: false, push: false },
@@ -29,6 +31,75 @@ export default function EmailMessagingSettings() {
     authToken: '',
     phoneNumber: ''
   });
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const data = await settingsService.getEmailSettings();
+      if (data) {
+        const smtp = data.smtp_config as any || {};
+        const sender = data.sender_identity as any || {};
+        const notifs = data.notifications as any || {};
+        const sms = data.sms_config as any || {};
+
+        setSmtpSettings({
+          host: smtp.host || '',
+          port: smtp.port || '',
+          username: smtp.username || '',
+          password: smtp.password || '',
+          secure: smtp.secure || false,
+          fromName: sender.fromName || '',
+          replyTo: sender.replyTo || ''
+        });
+        setSignature(data.signature || '');
+        
+        // Only update notifications if we have data, otherwise keep defaults
+        if (Object.keys(notifs).length > 0) {
+            setNotifications(notifs);
+        }
+
+        setTwilioSettings({
+            accountSid: sms.accountSid || '',
+            authToken: sms.authToken || '',
+            phoneNumber: sms.phoneNumber || ''
+        });
+      }
+    } catch (error) {
+      console.error('Error loading email settings:', error);
+      toast.error('Failed to load email settings');
+    }
+  };
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      await settingsService.updateEmailSettings({
+        smtp_config: {
+            host: smtpSettings.host,
+            port: smtpSettings.port,
+            username: smtpSettings.username,
+            password: smtpSettings.password,
+            secure: smtpSettings.secure
+        },
+        sender_identity: {
+            fromName: smtpSettings.fromName,
+            replyTo: smtpSettings.replyTo
+        },
+        signature: signature,
+        notifications: notifications,
+        sms_config: twilioSettings
+      });
+      toast.success('Email settings saved successfully');
+    } catch (error) {
+      console.error('Error saving email settings:', error);
+      toast.error('Failed to save email settings');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const tabs = [
     { id: 'email', label: 'Email Configuration', icon: Mail },
@@ -44,9 +115,13 @@ export default function EmailMessagingSettings() {
           <h2 className="text-2xl font-bold text-gray-900">Email & Messaging</h2>
           <p className="mt-1 text-sm text-gray-500">Configure how your system communicates with clients and staff.</p>
         </div>
-        <button className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500">
+        <button 
+          onClick={handleSave}
+          disabled={loading}
+          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 disabled:opacity-50"
+        >
           <Save className="h-4 w-4 mr-2" />
-          Save Changes
+          {loading ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
 
@@ -203,7 +278,7 @@ export default function EmailMessagingSettings() {
               {Object.entries(notifications).map(([key, prefs]) => (
                 <div key={key} className="grid grid-cols-5 gap-4 items-center py-2">
                   <div className="col-span-1 text-sm font-medium text-gray-900 capitalize">
-                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                    {key.replace(/([A-Z])/g, ' ').trim()}
                   </div>
                   {Object.entries(prefs).map(([channel, enabled]) => (
                     <div key={channel} className="flex justify-center">
@@ -301,7 +376,6 @@ export default function EmailMessagingSettings() {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

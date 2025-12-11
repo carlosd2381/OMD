@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { eventService } from '../../services/eventService';
+import { clientService } from '../../services/clientService';
 import type { Event } from '../../types/event';
+import type { Client } from '../../types/client';
 import toast from 'react-hot-toast';
 
 export default function EventForm() {
@@ -10,10 +12,13 @@ export default function EventForm() {
   const { id } = useParams<{ id: string }>();
   const isEditing = Boolean(id);
   const [loading, setLoading] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
   
   const [formData, setFormData] = useState<Partial<Event>>({
     name: '',
     date: '',
+    client_id: '',
+    secondary_client_id: '',
     status: 'inquiry',
     guest_count: 0,
     budget: 0,
@@ -21,10 +26,21 @@ export default function EventForm() {
   });
 
   useEffect(() => {
+    loadClients();
     if (isEditing && id) {
       loadEvent(id);
     }
   }, [isEditing, id]);
+
+  const loadClients = async () => {
+    try {
+      const data = await clientService.getClients();
+      setClients(data);
+    } catch (error) {
+      console.error('Error loading clients:', error);
+      toast.error('Failed to load clients');
+    }
+  };
 
   const loadEvent = async (eventId: string) => {
     try {
@@ -98,6 +114,51 @@ export default function EventForm() {
                 onChange={handleChange}
                 className="max-w-lg block w-full shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:max-w-xs sm:text-sm border-gray-300 rounded-md"
               />
+            </div>
+          </div>
+
+          <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 sm:pt-5">
+            <label htmlFor="client_id" className="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2">
+              Primary Client
+            </label>
+            <div className="mt-1 sm:mt-0 sm:col-span-2">
+              <select
+                id="client_id"
+                name="client_id"
+                required
+                value={formData.client_id || ''}
+                onChange={handleChange}
+                className="max-w-lg block w-full shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:max-w-xs sm:text-sm border-gray-300 rounded-md"
+              >
+                <option value="">Select a client</option>
+                {clients.map(client => (
+                  <option key={client.id} value={client.id}>
+                    {client.first_name} {client.last_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 sm:pt-5">
+            <label htmlFor="secondary_client_id" className="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2">
+              Secondary Client (Optional)
+            </label>
+            <div className="mt-1 sm:mt-0 sm:col-span-2">
+              <select
+                id="secondary_client_id"
+                name="secondary_client_id"
+                value={formData.secondary_client_id || ''}
+                onChange={handleChange}
+                className="max-w-lg block w-full shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:max-w-xs sm:text-sm border-gray-300 rounded-md"
+              >
+                <option value="">None</option>
+                {clients.filter(c => c.id !== formData.client_id).map(client => (
+                  <option key={client.id} value={client.id}>
+                    {client.first_name} {client.last_name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

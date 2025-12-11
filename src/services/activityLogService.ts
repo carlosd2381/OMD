@@ -1,50 +1,55 @@
+import { supabase } from '../lib/supabase';
 import type { ActivityLog, CreateActivityLogDTO } from '../types/activity';
+import type { Database } from '../types/supabase';
 
-const MOCK_LOGS: ActivityLog[] = [
-  {
-    id: '1',
-    entity_id: '1',
-    entity_type: 'client',
-    action: 'Client Created',
-    details: 'Client profile was created.',
-    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    created_by: 'Admin User',
-  },
-  {
-    id: '2',
-    entity_id: '1',
-    entity_type: 'client',
-    action: 'Status Updated',
-    details: 'Status changed from Lead to Active.',
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    created_by: 'Admin User',
-  },
-  {
-    id: '3',
-    entity_id: '1',
-    entity_type: 'event',
-    action: 'Event Created',
-    details: 'Wedding event created.',
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    created_by: 'Admin User',
-  },
-];
+type ActivityLogRow = Database['public']['Tables']['activity_logs']['Row'];
+type ActivityLogInsert = Database['public']['Tables']['activity_logs']['Insert'];
+
+function mapToActivityLog(row: ActivityLogRow): ActivityLog {
+  return {
+    id: row.id,
+    entity_id: row.entity_id,
+    entity_type: row.entity_type as ActivityLog['entity_type'],
+    action: row.action,
+    details: row.details || undefined,
+    created_at: row.created_at || new Date().toISOString(),
+    created_by: row.created_by,
+  };
+}
 
 export const activityLogService = {
   getLogs: async (entityId: string, entityType: string): Promise<ActivityLog[]> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return MOCK_LOGS.filter(l => l.entity_id === entityId && l.entity_type === entityType).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const { data, error } = await supabase
+      .from('activity_logs')
+      .select('*')
+      .eq('entity_id', entityId)
+      .eq('entity_type', entityType as any)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map(mapToActivityLog);
   },
 
   logActivity: async (log: CreateActivityLogDTO): Promise<ActivityLog> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const newLog: ActivityLog = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...log,
-      created_at: new Date().toISOString(),
-      created_by: 'Admin User',
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    const createdBy = user?.email || 'System';
+
+    const dbLog: ActivityLogInsert = {
+      entity_id: log.entity_id,
+      entity_type: log.entity_type,
+      action: log.action,
+      details: log.details,
+      created_by: createdBy,
     };
-    MOCK_LOGS.unshift(newLog);
-    return newLog;
+
+    const { data, error } = await supabase
+      .from('activity_logs')
+      .insert(dbLog)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return mapToActivityLog(data);
   },
 };

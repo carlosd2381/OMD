@@ -60,7 +60,7 @@
 
 ## Implementation Phase 3: Advanced Features & Polish
 
-- [ ] Implement PDF Generation
+- [x] Implement PDF Generation
     <!-- Generate PDF documents for Quotes, Contracts, and Invoices -->
 
 - [ ] Implement Email Notifications
@@ -84,7 +84,7 @@
     <!-- Configure Stripe, PayPal, Wise, Bank Transfers, and Cash -->
 
 - [x] Implement Payment Schedules
-    <!-- Configure standard payment terms and milestones -->
+    <!-- Configure standard payment terms and milestones. Note: Payment Plans are stored in `payment_schedules` table, not `templates`. -->
 
 - [x] Implement Contact Forms
     <!-- Create form builder with embed code generation -->

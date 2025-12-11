@@ -6,7 +6,15 @@ export interface QuoteItem {
   description: string;
   quantity: number;
   unit_price: number; // In MXN
+  cost: number; // COG in MXN
   total: number; // In MXN
+}
+
+export interface QuoteTax {
+  name: string;
+  rate: number;
+  amount: number;
+  is_retention: boolean;
 }
 
 export interface Quote {
@@ -14,6 +22,7 @@ export interface Quote {
   client_id: string;
   event_id: string;
   items: QuoteItem[];
+  taxes?: QuoteTax[];
   
   // Financials
   currency: CurrencyCode;

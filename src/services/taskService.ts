@@ -1,69 +1,106 @@
+import { supabase } from '../lib/supabase';
 import type { Task, TaskTemplate } from '../types/task';
+import type { Database } from '../types/supabase';
 
-// Mock Templates
-const MOCK_TEMPLATES: TaskTemplate[] = [
-  { id: 't1', title: 'Send Welcome Packet', category: 'Onboarding' },
-  { id: 't2', title: 'Schedule Initial Consultation', category: 'Onboarding' },
-  { id: 't3', title: 'Create Mood Board', category: 'Design' },
-  { id: 't4', title: 'Finalize Guest Count', category: 'Planning' },
-  { id: 't5', title: 'Confirm Vendor Meals', category: 'Planning' },
-];
+type TaskRow = Database['public']['Tables']['tasks']['Row'];
+type TaskInsert = Database['public']['Tables']['tasks']['Insert'];
+type TaskUpdate = Database['public']['Tables']['tasks']['Update'];
 
-// Mock Tasks
-let MOCK_TASKS: Task[] = [
-  {
-    id: '1',
-    client_id: '1',
-    title: 'Send Welcome Packet',
-    status: 'completed',
-    completed_at: '2024-01-15T10:30:00Z',
-    completed_by: 'Admin User',
-    created_at: '2024-01-10T09:00:00Z',
-  },
-  {
-    id: '2',
-    client_id: '1',
-    title: 'Schedule Initial Consultation',
-    status: 'pending',
-    due_date: '2024-02-01',
-    created_at: '2024-01-10T09:00:00Z',
-  }
-];
+type TaskTemplateRow = Database['public']['Tables']['task_templates']['Row'];
+
+function mapToTask(row: TaskRow): Task {
+  return {
+    id: row.id,
+    client_id: row.client_id,
+    title: row.title,
+    description: row.description || undefined,
+    status: row.status,
+    due_date: row.due_date || undefined,
+    completed_at: row.completed_at || undefined,
+    completed_by: row.completed_by || undefined,
+    created_at: row.created_at || new Date().toISOString(),
+  };
+}
+
+function mapToTaskTemplate(row: TaskTemplateRow): TaskTemplate {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || undefined,
+    category: row.category || undefined,
+  };
+}
 
 export const taskService = {
   getTasksByClient: async (clientId: string): Promise<Task[]> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return MOCK_TASKS.filter(t => t.client_id === clientId);
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map(mapToTask);
   },
 
   addTask: async (task: Omit<Task, 'id' | 'created_at'>): Promise<Task> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const newTask: Task = {
-      ...task,
-      id: Math.random().toString(36).substr(2, 9),
-      created_at: new Date().toISOString(),
+    const dbTask: TaskInsert = {
+      client_id: task.client_id,
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      due_date: task.due_date,
+      completed_at: task.completed_at,
+      completed_by: task.completed_by,
     };
-    MOCK_TASKS.push(newTask);
-    return newTask;
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert(dbTask)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return mapToTask(data);
   },
 
   updateTask: async (id: string, updates: Partial<Task>): Promise<Task | undefined> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const index = MOCK_TASKS.findIndex(t => t.id === id);
-    if (index !== -1) {
-      MOCK_TASKS[index] = { ...MOCK_TASKS[index], ...updates };
-      return MOCK_TASKS[index];
-    }
-    return undefined;
+    const dbUpdates: TaskUpdate = {
+      title: updates.title,
+      description: updates.description,
+      status: updates.status,
+      due_date: updates.due_date,
+      completed_at: updates.completed_at,
+      completed_by: updates.completed_by,
+    };
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return mapToTask(data);
   },
 
   deleteTask: async (id: string): Promise<void> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    MOCK_TASKS = MOCK_TASKS.filter(t => t.id !== id);
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
   },
 
   getTemplates: async (): Promise<TaskTemplate[]> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return MOCK_TEMPLATES;
+    const { data, error } = await supabase
+      .from('task_templates')
+      .select('*')
+      .order('title', { ascending: true });
+
+    if (error) throw error;
+    return (data || []).map(mapToTaskTemplate);
   }
 };

@@ -1,319 +1,88 @@
+import { supabase } from '../lib/supabase';
 import type { Product, CreateProductDTO, UpdateProductDTO } from '../types/product';
 
-let MOCK_PRODUCTS: Product[] = [
-  {
-    id: '1',
-    name: 'Churros - Traditional',
-    description: 'Freshly fried churros, dusted with sugar & cinnamon.',
-    category: 'Churros',
-    cost: 25.00,
-    price_direct: 90.00,
-    price_pv: 124.00,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    name: 'Churros - With Topping Bar',
-    description: 'Traditional churros served with a variety of sweet toppings.',
-    category: 'Churros',
-    cost: 30.00,
-    price_direct: 110.00,
-    price_pv: 142.50,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '3',
-    name: 'Churros - Filled',
-    description: 'Churros filled with chocolate, caramel, or condensed milk.',
-    category: 'Churros',
-    cost: 35.00,
-    price_direct: 117.00,
-    price_pv: 152.00,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '4',
-    name: 'Churros & Ice Cream',
-    description: 'Churros served with a scoop of ice cream.',
-    category: 'Churros - Ice Cream',
-    cost: 40.00,
-    price_direct: 125.00,
-    price_pv: 170.00,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '5',
-    name: 'Rolled Ice Cream -Traditional Flavours + Fruits',
-    description: 'Classic rolls topped with fresh seasonal fruits.',
-    category: 'Rolls',
-    cost: 40.00,
-    price_direct: 110.00,
-    price_pv: 142.50,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '6',
-    name: 'Rolled Ice Cream - Signature Rollz',
-    description: 'Gourmet-style rolled ice cream with premium toppings.',
-    category: 'Rolls',
-    cost: 50.00,
-    price_direct: 135.00,
-    price_pv: 162.00,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '7',
-    name: 'Mini-Pancakes - w/Topping Bar',
-    description: 'Bite-sized pancakes with assorted syrups and toppings.',
-    category: 'Pancakes',
-    cost: 25.00,
-    price_direct: 110.00,
-    price_pv: 142.50,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '8',
-    name: 'Mini-Pancakes - w/Topping Bar + Fruits',
-    description: 'Pancakes with toppings and fresh fruits.',
-    category: 'Pancakes',
-    cost: 35.00,
-    price_direct: 120.00,
-    price_pv: 155.00,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '9',
-    name: 'Mini-Pancakes & Ice Cream',
-    description: 'Pancakes paired with a scoop of ice cream.',
-    category: 'Pancakes - Ice Cream',
-    cost: 40.00,
-    price_direct: 125.00,
-    price_pv: 170.00,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '10',
-    name: 'Mini-Waffles - w/Topping Bar',
-    description: 'Mini Belgian-style waffles with sweet toppings.',
-    category: 'Waffles',
-    cost: 25.00,
-    price_direct: 110.00,
-    price_pv: 142.50,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '11',
-    name: 'Mini-Waffles - w/Topping Bar + Fruits',
-    description: 'Waffles with toppings and fresh fruit selection.',
-    category: 'Waffles',
-    cost: 35.00,
-    price_direct: 120.00,
-    price_pv: 155.00,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '12',
-    name: 'Mini-Waffles & Ice Cream',
-    description: 'Waffles served with ice cream.',
-    category: 'Waffles - Ice Cream',
-    cost: 40.00,
-    price_direct: 125.00,
-    price_pv: 170.00,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '13',
-    name: 'Ice Cream',
-    description: 'Premium dairy-based ice cream, flavors to be choosen.',
-    category: 'Ice Cream',
-    cost: 25.00,
-    price_direct: 117.00,
-    price_pv: 142.50,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '14',
-    name: 'Sorbet',
-    description: 'Dairy-free, fruit-based frozen dessert.',
-    category: 'Sorbet',
-    cost: 25.00,
-    price_direct: 117.00,
-    price_pv: 142.50,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '15',
-    name: 'Mini-Donuts w/Topping Bar',
-    description: 'Fresh mini-donuts with customizable toppings.',
-    category: 'Donuts',
-    cost: 25.00,
-    price_direct: 110.00,
-    price_pv: 125.00,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '16',
-    name: 'Mini-Donuts & Ice Cream',
-    description: 'Mini-donuts served with a scoop of ice cream.',
-    category: 'Donuts - Ice Cream',
-    cost: 35.00,
-    price_direct: 117.00,
-    price_pv: 142.50,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '17',
-    name: 'Stuffed Conchas',
-    description: 'Traditional Mexican conchas filled with flavored creams.',
-    category: 'Conchas',
-    cost: 35.00,
-    price_direct: 117.00,
-    price_pv: 142.50,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '18',
-    name: 'Cannolis Boxes w/2 servers',
-    description: 'Crisp pastry shells filled with sweet ricotta cream.',
-    category: 'Cannolis',
-    cost: 35.00,
-    price_direct: 110.00,
-    price_pv: 142.50,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '19',
-    name: 'Cannolis Boxes w/2 servers and a booth',
-    description: 'Crisp pastry shells filled with sweet ricotta cream.',
-    category: 'Cannolis',
-    cost: 35.00,
-    price_direct: 125.00,
-    price_pv: 170.00,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '20',
-    name: "S'mores Bar",
-    description: 'Build-your-own s’mores with graham crackers, chocolate, and toasted marshmallows.',
-    category: 'Smores',
-    cost: 30.00,
-    price_direct: 117.00,
-    price_pv: 142.50,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: '21',
-    name: 'Chocolate Fountains',
-    description: '',
-    category: 'Chocolate Fountains',
-    cost: 30.00,
-    price_direct: 117.00,
-    price_pv: 142.50,
-    is_active: true,
-    unit: 'per person',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
-
 export const productService = {
-  getProducts: async (): Promise<Product[]> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return [...MOCK_PRODUCTS];
+  async getProducts(): Promise<Product[]> {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+
+    return (data || []).map(mapToProduct);
   },
 
-  getProduct: async (id: string): Promise<Product | undefined> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return MOCK_PRODUCTS.find(p => p.id === id);
+  async getProduct(id: string): Promise<Product | null> {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return mapToProduct(data);
   },
 
-  createProduct: async (data: CreateProductDTO): Promise<Product> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const newProduct: Product = {
-      ...data,
-      id: Math.random().toString(36).substr(2, 9),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    MOCK_PRODUCTS.push(newProduct);
-    return newProduct;
+  async createProduct(product: CreateProductDTO): Promise<Product> {
+    const { data, error } = await supabase
+      .from('products')
+      .insert({
+        name: product.name,
+        description: product.description,
+        category: product.category,
+        cost: product.cost,
+        price_direct: product.price_direct,
+        price_pv: product.price_pv,
+        is_active: product.is_active,
+        unit: product.unit,
+        image_url: product.image_url
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return mapToProduct(data);
   },
 
-  updateProduct: async (id: string, data: UpdateProductDTO): Promise<Product> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const index = MOCK_PRODUCTS.findIndex(p => p.id === id);
-    if (index === -1) throw new Error('Product not found');
-    
-    MOCK_PRODUCTS[index] = {
-      ...MOCK_PRODUCTS[index],
-      ...data,
-      updated_at: new Date().toISOString(),
-    };
-    return MOCK_PRODUCTS[index];
+  async updateProduct(id: string, product: UpdateProductDTO): Promise<Product> {
+    const { data, error } = await supabase
+      .from('products')
+      .update({
+        ...product,
+        // updated_at: new Date().toISOString() // TODO: Add updated_at column to DB
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return mapToProduct(data);
   },
 
-  deleteProduct: async (id: string): Promise<void> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    MOCK_PRODUCTS = MOCK_PRODUCTS.filter(p => p.id !== id);
-  },
+  async deleteProduct(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  }
 };
+
+// Helper to map DB result to Product type
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapToProduct(data: any): Product {
+  return {
+    ...data,
+    description: data.description || '',
+    image_url: data.image_url || undefined,
+    unit: data.unit || undefined,
+    is_active: data.is_active ?? true,
+    updated_at: data.created_at // Fallback
+  };
+}

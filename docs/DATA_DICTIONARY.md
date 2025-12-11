@@ -88,6 +88,7 @@ This document serves as the central reference for all data entities, their field
 | Event Type | `event_type` | enum | No | Wedding, Social Event, Corporate Event, Convention, Other |
 | Event Date | `event_date` | date | No | |
 | Guest Count | `guest_count` | number | No | Approximate |
+| Budget | `budget` | number | No | |
 | Venue Name | `venue_name` | string | No | Text field (user input) |
 | Services | `services_interested` | array | No | Mini-Churros, Mini-Pancakes, etc. |
 | Notes | `notes` | string | No | "Other information" |
@@ -143,7 +144,7 @@ This document serves as the central reference for all data entities, their field
 | Exchange Rate | `exchange_rate` | number | Yes | Rate at time of creation (MXN base) |
 | Questionnaire | `questionnaire_template_id` | uuid | No | Template ID |
 | Contract | `contract_template_id` | uuid | No | Template ID |
-| Payment Plan | `payment_plan_template_id` | uuid | No | Template ID |
+| Payment Plan | `payment_plan_template_id` | uuid | No | Payment Schedule ID (from `payment_schedules` table) |
 | Status | `status` | enum | Yes | draft, sent, accepted, rejected |
 | Valid Until | `valid_until` | date | Yes | |
 | Version | `version` | number | Yes | Default 1. Increments on edit. |
@@ -315,8 +316,10 @@ To prevent "mapping errors":
 | Tax Name | `tax_name` | string | Yes | e.g., IVA |
 | Tax Rate | `tax_rate` | number | Yes | Percentage (e.g., 16) |
 | Tax ID | `tax_id` | string | No | RFC |
-| Invoice Prefix | `invoice_prefix` | string | Yes | e.g., INV- |
-| Next Invoice # | `next_invoice_number` | number | Yes | |
+| Invoice Prefix | `invoice_sequence_prefix` | string | Yes | e.g., INV- |
+| Next Invoice # | `invoice_sequence_start` | number | Yes | |
+| Quote Prefix | `quote_sequence_prefix` | string | Yes | e.g., QT- |
+| Next Quote # | `quote_sequence_start` | number | Yes | |
 | Fiscal Year Start | `fiscal_year_start` | string | Yes | MM-DD |
 
 ### Payment Methods (`payment_methods` table)
@@ -324,7 +327,7 @@ To prevent "mapping errors":
 | UI Label | Field Name (Code/DB) | Type | Required | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | Provider | `provider` | enum | Yes | stripe, paypal, wise, remitly, bank_transfer, cash |
-| Enabled | `enabled` | boolean | Yes | |
+| Enabled | `is_active` | boolean | Yes | |
 | Config | `config` | jsonb | Yes | Stores API keys, account numbers, instructions, etc. |
 
 ### Payment Schedules (`payment_schedules` table)

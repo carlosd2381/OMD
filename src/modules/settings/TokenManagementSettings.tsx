@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Search, Copy, Trash2, Edit2, Play, Settings, Database, Tag, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { settingsService } from '../../services/settingsService';
+import { SYSTEM_TOKENS as SHARED_SYSTEM_TOKENS } from '../../constants/tokens';
 
 type TokenType = 'system' | 'custom';
 type TokenSyntax = 'mustache' | 'percent' | 'brackets';
 
 interface Token {
+  id?: string;
   key: string;
   description: string;
   category: string;
@@ -16,27 +19,19 @@ interface Token {
   usageCount?: number;
 }
 
-const SYSTEM_TOKENS: Token[] = [
-  { key: 'client_first_name', description: "Client's first name", category: 'Client', type: 'system', usageCount: 12 },
-  { key: 'client_last_name', description: "Client's last name", category: 'Client', type: 'system', usageCount: 5 },
-  { key: 'event_date', description: "Date of the main event", category: 'Event', type: 'system', usageCount: 8 },
-  { key: 'event_venue', description: "Name of the venue", category: 'Event', type: 'system', usageCount: 3 },
-  { key: 'invoice_total', description: "Total amount of invoice", category: 'Financial', type: 'system', usageCount: 15 },
-  { key: 'balance_due', description: "Remaining balance", category: 'Financial', type: 'system', usageCount: 15 },
-  { key: 'company_name', description: "Your company name", category: 'Company', type: 'system', usageCount: 20 },
-  { key: 'current_date', description: "Today's date", category: 'System', type: 'system', usageCount: 2 },
-];
-
-const INITIAL_CUSTOM_TOKENS: Token[] = [
-  { key: 'wifi_password', description: "Office WiFi Password", category: 'General', type: 'custom', value: 'SweetTreats2024!', usageCount: 1 },
-  { key: 'support_phone', description: "Customer Support Line", category: 'General', type: 'custom', value: '+52 555 123 4567', usageCount: 4 },
-  { key: 'instagram_handle', description: "Our Instagram", category: 'Social', type: 'custom', value: '@omd_events', usageCount: 2 },
-];
+const SYSTEM_TOKENS: Token[] = SHARED_SYSTEM_TOKENS.map(t => ({
+  key: t.key,
+  description: t.description || t.label,
+  category: t.category,
+  type: 'system',
+  usageCount: 0
+}));
 
 export default function TokenManagementSettings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'library' | 'custom' | 'settings' | 'tester'>('library');
-  const [customTokens, setCustomTokens] = useState<Token[]>(INITIAL_CUSTOM_TOKENS);
+  const [customTokens, setCustomTokens] = useState<Token[]>([]);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Settings State
@@ -56,6 +51,33 @@ export default function TokenManagementSettings() {
   const [modalValue, setModalValue] = useState('');
   const [modalDesc, setModalDesc] = useState('');
   const [modalCategory, setModalCategory] = useState('General');
+
+  useEffect(() => {
+    loadTokens();
+  }, []);
+
+  const loadTokens = async () => {
+    setLoading(true);
+    try {
+      const data = await settingsService.getTokens();
+      
+      const mapped: Token[] = data.map(item => ({
+        id: item.id,
+        key: item.key,
+        description: item.label || '', // Map label to description
+        category: item.category || 'General',
+        type: 'custom',
+        value: item.default_value || '', // Map default_value to value
+        usageCount: 0
+      }));
+      setCustomTokens(mapped);
+    } catch (error) {
+      console.error('Error loading tokens:', error);
+      toast.error('Failed to load tokens');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getWrapper = (s: TokenSyntax) => {
     switch (s) {
@@ -96,40 +118,71 @@ export default function TokenManagementSettings() {
     setIsModalOpen(true);
   };
 
-  const handleDeleteCustom = (key: string) => {
+  const handleDeleteCustom = async (token: Token) => {
+    if (!token.id) return;
     if (confirm('Are you sure? This token will stop working in all templates.')) {
-      setCustomTokens(customTokens.filter(t => t.key !== key));
-      toast.success('Token deleted');
+        try {
+            await settingsService.deleteToken(token.id);
+            setCustomTokens(customTokens.filter(t => t.id !== token.id));
+            toast.success('Token deleted');
+        } catch (error) {
+            console.error('Error deleting token:', error);
+            toast.error('Failed to delete token');
+        }
     }
   };
 
-  const handleSaveCustom = () => {
+  const handleSaveCustom = async () => {
     if (!modalKey || !modalValue) {
       toast.error('Key and Value are required');
       return;
     }
 
-    const newToken: Token = {
-      key: modalKey.replace(/\s+/g, '_').toLowerCase(),
-      value: modalValue,
-      description: modalDesc,
-      category: modalCategory,
-      type: 'custom',
-      usageCount: 0
-    };
+    const key = modalKey.replace(/\s+/g, '_').toLowerCase();
 
-    if (editingToken) {
-      setCustomTokens(customTokens.map(t => t.key === editingToken.key ? newToken : t));
-      toast.success('Token updated');
-    } else {
-      if (customTokens.find(t => t.key === newToken.key) || SYSTEM_TOKENS.find(t => t.key === newToken.key)) {
-        toast.error('Token key already exists');
-        return;
-      }
-      setCustomTokens([...customTokens, newToken]);
-      toast.success('Token created');
+    try {
+        if (editingToken && editingToken.id) {
+            const updated = await settingsService.updateToken(editingToken.id, {
+                key,
+                default_value: modalValue, // Map value to default_value
+                label: modalDesc, // Map description to label
+                category: modalCategory
+            } as any);
+            setCustomTokens(customTokens.map(t => t.id === updated.id ? {
+                ...t,
+                key: updated.key,
+                value: updated.default_value || '',
+                description: updated.label || '',
+                category: updated.category || 'General'
+            } : t));
+            toast.success('Token updated');
+        } else {
+            if (customTokens.find(t => t.key === key) || SYSTEM_TOKENS.find(t => t.key === key)) {
+                toast.error('Token key already exists');
+                return;
+            }
+            const created = await settingsService.createToken({
+                key,
+                default_value: modalValue, // Map value to default_value
+                label: modalDesc, // Map description to label
+                category: modalCategory
+            } as any);
+            setCustomTokens([...customTokens, {
+                id: created.id,
+                key: created.key,
+                value: created.default_value || '',
+                description: created.label || '',
+                category: created.category || 'General',
+                type: 'custom',
+                usageCount: 0
+            }]);
+            toast.success('Token created');
+        }
+        setIsModalOpen(false);
+    } catch (error) {
+        console.error('Error saving token:', error);
+        toast.error('Failed to save token');
     }
-    setIsModalOpen(false);
   };
 
   const runTest = () => {
@@ -141,8 +194,8 @@ export default function TokenManagementSettings() {
       client_last_name: 'Connor',
       event_date: dateFormat === 'MM/DD/YYYY' ? '12/25/2025' : '25/12/2025',
       event_venue: 'Grand Hotel',
-      invoice_total: currencyFormat === 'USD' ? '$5,000.00' : 'MXN $85,000.00',
-      balance_due: currencyFormat === 'USD' ? '$2,500.00' : 'MXN $42,500.00',
+      invoice_total: currencyFormat === 'USD' ? ',000.00' : 'MXN ,000.00',
+      balance_due: currencyFormat === 'USD' ? ',500.00' : 'MXN ,500.00',
       company_name: 'OMD Events',
       current_date: new Date().toLocaleDateString(),
     };
@@ -303,9 +356,12 @@ export default function TokenManagementSettings() {
         {/* Custom Tokens Tab */}
         {activeTab === 'custom' && (
           <div className="p-6">
+            {loading ? (
+                <div className="text-center py-12">Loading tokens...</div>
+            ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {customTokens.map((token) => (
-                <div key={token.key} className="relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm flex items-center space-x-3 hover:border-pink-400 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-pink-500">
+                <div key={token.id || token.key} className="relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm flex items-center space-x-3 hover:border-pink-400 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-pink-500">
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
                       <p className="text-sm font-medium text-pink-600 font-mono truncate">
@@ -315,7 +371,7 @@ export default function TokenManagementSettings() {
                         <button onClick={() => handleEditCustom(token)} className="text-gray-400 hover:text-indigo-500">
                           <Edit2 className="h-4 w-4" />
                         </button>
-                        <button onClick={() => handleDeleteCustom(token.key)} className="text-gray-400 hover:text-red-500">
+                        <button onClick={() => handleDeleteCustom(token)} className="text-gray-400 hover:text-red-500">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
@@ -339,6 +395,7 @@ export default function TokenManagementSettings() {
                 <span className="mt-2 block text-sm font-medium text-gray-900">Create new token</span>
               </button>
             </div>
+            )}
           </div>
         )}
 
@@ -397,8 +454,8 @@ export default function TokenManagementSettings() {
                     onChange={(e) => setCurrencyFormat(e.target.value)}
                     className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-pink-500 focus:border-pink-500 sm:text-sm rounded-md"
                   >
-                    <option value="USD">$1,234.56 (USD)</option>
-                    <option value="MXN">MXN $1,234.56</option>
+                    <option value="USD">,234.56 (USD)</option>
+                    <option value="MXN">MXN ,234.56</option>
                     <option value="EUR">€1.234,56</option>
                   </select>
                 </div>
@@ -454,7 +511,7 @@ export default function TokenManagementSettings() {
                 <ul className="mt-2 text-xs text-blue-700 grid grid-cols-2 gap-2">
                   <li>client_first_name: Sarah</li>
                   <li>event_date: {dateFormat === 'MM/DD/YYYY' ? '12/25/2025' : '25/12/2025'}</li>
-                  <li>invoice_total: {currencyFormat === 'USD' ? '$5,000.00' : 'MXN $85,000.00'}</li>
+                  <li>invoice_total: {currencyFormat === 'USD' ? ',000.00' : 'MXN ,000.00'}</li>
                   <li>wifi_password: SweetTreats2024!</li>
                 </ul>
               </div>

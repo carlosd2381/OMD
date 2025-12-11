@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Mail, Phone, Calendar, Users, MapPin, Tag, MessageSquare, UserPlus } from 'lucide-react';
 import { leadService } from '../../services/leadService';
 import { clientService } from '../../services/clientService';
+import { eventService } from '../../services/eventService';
 import type { Lead } from '../../types/lead';
 import NotesTab from '../../components/NotesTab';
 import toast from 'react-hot-toast';
@@ -53,12 +54,27 @@ export default function LeadDetails() {
         notes: lead.notes,
       });
 
-      // 2. Update Lead Status
+      // 2. Create Event (always create an event for the client)
+      // Create an event for this client
+      await eventService.createEvent({
+        name: `${lead.first_name} ${lead.last_name}'s Event`,
+        date: lead.event_date || new Date().toISOString(),
+        type: lead.event_type || 'wedding',
+        client_id: newClient.id,
+        status: 'inquiry',
+        guest_count: lead.guest_count,
+        budget: lead.budget,
+        venue_name: lead.venue_name,
+        services: lead.services_interested
+      });
+      toast.success('Event created from lead details');
+
+      // 3. Update Lead Status
       await leadService.updateLead(lead.id, { status: 'Converted' });
 
       toast.success('Lead converted to Client successfully!');
       
-      // 3. Navigate to Client Details
+      // 4. Navigate to Client Details
       navigate(`/clients/${newClient.id}`);
     } catch (error) {
       console.error(error);

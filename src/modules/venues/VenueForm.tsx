@@ -112,7 +112,7 @@ export default function VenueForm() {
   const onContactSubmit = async (data: ContactFormData) => {
     if (!id) return;
     try {
-      await venueService.addVenueContact(id, { ...data, venue_id: id });
+      await venueService.createVenueContact({ ...data, venue_id: id });
       toast.success('Contact added successfully');
       setIsContactModalOpen(false);
       resetContact();

@@ -1,48 +1,62 @@
+import { supabase } from '../lib/supabase';
 import type { Note, CreateNoteDTO } from '../types/note';
+import type { Database } from '../types/supabase';
 
-const MOCK_NOTES: Note[] = [
-  {
-    id: '1',
-    entity_id: '1',
-    entity_type: 'client',
-    content: 'Initial consultation went well. Client is interested in the full package.',
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    created_by: 'Admin User',
-  },
-  {
-    id: '2',
-    entity_id: '1',
-    entity_type: 'event',
-    content: 'Need to follow up on catering options.',
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    created_by: 'Admin User',
-  },
-];
+type NoteRow = Database['public']['Tables']['notes']['Row'];
+type NoteInsert = Database['public']['Tables']['notes']['Insert'];
+
+function mapToNote(row: NoteRow): Note {
+  return {
+    id: row.id,
+    entity_id: row.entity_id,
+    entity_type: row.entity_type as Note['entity_type'],
+    content: row.content,
+    created_at: row.created_at || new Date().toISOString(),
+    created_by: row.created_by,
+  };
+}
 
 export const noteService = {
   getNotes: async (entityId: string, entityType: string): Promise<Note[]> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return MOCK_NOTES.filter(n => n.entity_id === entityId && n.entity_type === entityType).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const { data, error } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('entity_id', entityId)
+      .eq('entity_type', entityType as any)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map(mapToNote);
   },
 
   addNote: async (note: CreateNoteDTO): Promise<Note> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const newNote: Note = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...note,
-      created_at: new Date().toISOString(),
-      created_by: 'Admin User', // Hardcoded for now
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    const createdBy = user?.email || 'System';
+
+    const dbNote: NoteInsert = {
+      entity_id: note.entity_id,
+      entity_type: note.entity_type,
+      content: note.content,
+      created_by: createdBy,
     };
-    MOCK_NOTES.unshift(newNote);
-    return newNote;
+
+    const { data, error } = await supabase
+      .from('notes')
+      .insert(dbNote)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return mapToNote(data);
   },
 
   deleteNote: async (id: string): Promise<void> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const index = MOCK_NOTES.findIndex(n => n.id === id);
-    if (index !== -1) {
-      MOCK_NOTES.splice(index, 1);
-    }
+    const { error } = await supabase
+      .from('notes')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
   },
 };

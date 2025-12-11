@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, DollarSign, FileText, Calendar, Building2, Calculator } from 'lucide-react';
+import { ArrowLeft, DollarSign, FileText, Building2, Calculator } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { settingsService } from '../../services/settingsService';
 
 export default function FinancialSettings() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  // Mock state
   const [settings, setSettings] = useState({
     currency: 'MXN',
     taxes: {
@@ -27,19 +27,80 @@ export default function FinancialSettings() {
       endMonth: 'december',
     },
     companyDetails: {
-      legalName: 'Oh My Desserts S.A. de C.V.',
-      taxId: 'OMD230101ABC',
-      address: 'Av. Huayacan Km 4.5, Cancun, Q.R., Mexico',
-      email: 'billing@omd.com',
+      legalName: '',
+      taxId: '',
+      address: '',
+      email: '',
     }
   });
 
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const data = await settingsService.getFinancialSettings();
+      if (data) {
+        let extraConfig: any = {};
+        try {
+          if (data.invoice_sequence_prefix && data.invoice_sequence_prefix.startsWith('{')) {
+            extraConfig = JSON.parse(data.invoice_sequence_prefix);
+          } else if (data.invoice_sequence_prefix) {
+             // Legacy or simple string support
+             extraConfig = { prefixes: { invoice: data.invoice_sequence_prefix } };
+          }
+        } catch (e) {
+          console.warn('Failed to parse invoice_sequence_prefix as JSON', e);
+        }
+
+        setSettings({
+          currency: data.currency || 'MXN',
+          taxes: {
+            iva: data.tax_rate || 16,
+            iva_retenido: extraConfig.taxes?.iva_retenido || 0,
+            isr: extraConfig.taxes?.isr || 0,
+            isr_retenido: extraConfig.taxes?.isr_retenido || 0,
+          },
+          prefixes: {
+            invoice: extraConfig.prefixes?.invoice || (data.invoice_sequence_prefix?.startsWith('{') ? 'INV' : data.invoice_sequence_prefix) || 'INV',
+            quote: extraConfig.prefixes?.quote || 'QTE',
+            contract: extraConfig.prefixes?.contract || 'CON',
+            questionnaire: extraConfig.prefixes?.questionnaire || 'QST',
+          },
+          fiscalYear: extraConfig.fiscalYear || { startMonth: 'january', endMonth: 'december' },
+          companyDetails: extraConfig.companyDetails || { legalName: '', taxId: '', address: '', email: '' },
+        });
+      }
+    } catch (error) {
+      console.error('Error loading financial settings:', error);
+      toast.error('Failed to load financial settings');
+    }
+  };
+
   const handleSave = async () => {
     setLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    toast.success('Financial settings saved successfully');
-    setLoading(false);
+    try {
+      // Pack extras into invoice_sequence_prefix
+      const packedConfig = JSON.stringify({
+        taxes: settings.taxes,
+        prefixes: settings.prefixes,
+        fiscalYear: settings.fiscalYear,
+        companyDetails: settings.companyDetails
+      });
+
+      await settingsService.updateFinancialSettings({
+        currency: settings.currency as any,
+        tax_rate: settings.taxes.iva,
+        invoice_sequence_prefix: packedConfig,
+      });
+      toast.success('Financial settings saved successfully');
+    } catch (error) {
+      console.error('Error saving financial settings:', error);
+      toast.error('Failed to save financial settings');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

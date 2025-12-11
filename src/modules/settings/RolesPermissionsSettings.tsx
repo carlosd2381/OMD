@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Shield, Check, AlertTriangle, Lock, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Shield, AlertTriangle, Lock, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { settingsService } from '../../services/settingsService';
 
 type PermissionType = 'create' | 'read' | 'update' | 'delete';
 
@@ -198,15 +199,80 @@ const INITIAL_ROLES: Role[] = [
 
 export default function RolesPermissionsSettings() {
   const navigate = useNavigate();
-  const [roles, setRoles] = useState<Role[]>(INITIAL_ROLES);
-  const [selectedRoleId, setSelectedRoleId] = useState<string>('admin');
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [isEditingName, setIsEditingName] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadRoles();
+  }, []);
+
+  const loadRoles = async () => {
+    setLoading(true);
+    try {
+      const data = await settingsService.getRoles();
+      if (data.length === 0) {
+          await seedDefaults();
+          return;
+      }
+
+      const mapped: Role[] = data.map(item => ({
+        id: item.id,
+        name: item.name,
+        description: item.description || '',
+        isSystem: item.is_system || false,
+        permissions: (item.permissions as any) || {
+            clients: DEFAULT_PERMISSIONS,
+            leads: DEFAULT_PERMISSIONS,
+            events: DEFAULT_PERMISSIONS,
+            products: DEFAULT_PERMISSIONS,
+            venues: DEFAULT_PERMISSIONS,
+            planners: DEFAULT_PERMISSIONS,
+            financials: DEFAULT_PERMISSIONS,
+            settings: DEFAULT_PERMISSIONS,
+        },
+        fieldSecurity: (item.field_security as any) || {
+            viewFinancialTotals: false,
+            viewClientContactInfo: false,
+            exportData: false,
+            approveContracts: false,
+        }
+      }));
+      setRoles(mapped);
+      if (!selectedRoleId || !mapped.find(r => r.id === selectedRoleId)) {
+          setSelectedRoleId(mapped[0]?.id || '');
+      }
+    } catch (error) {
+      console.error('Error loading roles:', error);
+      toast.error('Failed to load roles');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const seedDefaults = async () => {
+      try {
+          for (const role of INITIAL_ROLES) {
+              await settingsService.createRole({
+                  name: role.name,
+                  description: role.description,
+                  is_system: role.isSystem,
+                  permissions: role.permissions as any,
+                  field_security: role.fieldSecurity as any
+              });
+          }
+          await loadRoles();
+      } catch (error) {
+          console.error('Error seeding roles:', error);
+      }
+  };
 
   const selectedRole = roles.find(r => r.id === selectedRoleId) || roles[0];
 
   const handleAddRole = () => {
     const newRole: Role = {
-      id: Date.now().toString(),
+      id: 'new_' + Date.now().toString(),
       name: 'New Role',
       description: 'Custom role with defined permissions.',
       isSystem: false,
@@ -232,22 +298,36 @@ export default function RolesPermissionsSettings() {
     setIsEditingName(true);
   };
 
-  const handleDeleteRole = (id: string) => {
-    if (roles.find(r => r.id === id)?.isSystem) {
+  const handleDeleteRole = async (id: string) => {
+    const role = roles.find(r => r.id === id);
+    if (role?.isSystem) {
       toast.error('Cannot delete system roles');
       return;
     }
     if (confirm('Are you sure you want to delete this role? Users assigned to this role will lose access.')) {
-      setRoles(roles.filter(r => r.id !== id));
-      if (selectedRoleId === id) setSelectedRoleId(roles[0].id);
-      toast.success('Role deleted');
+        try {
+            if (!id.startsWith('new_')) {
+                await settingsService.deleteRole(id);
+            }
+            const remaining = roles.filter(r => r.id !== id);
+            setRoles(remaining);
+            if (selectedRoleId === id) setSelectedRoleId(remaining[0]?.id || '');
+            toast.success('Role deleted');
+        } catch (error) {
+            console.error('Error deleting role:', error);
+            toast.error('Failed to delete role');
+        }
     }
   };
 
   const updatePermission = (module: keyof Role['permissions'], type: PermissionType, value: boolean) => {
-    if (selectedRole.id === 'admin') {
-      toast.error('Admin permissions cannot be modified');
-      return;
+    if (selectedRole?.id === 'admin' || selectedRole?.isSystem) {
+        // Allow updating system roles? Usually not admin, but maybe others.
+        // The original code blocked admin.
+        if (selectedRole?.id === 'admin') {
+             toast.error('Admin permissions cannot be modified');
+             return;
+        }
     }
     setRoles(roles.map(r => {
       if (r.id === selectedRoleId) {
@@ -267,7 +347,7 @@ export default function RolesPermissionsSettings() {
   };
 
   const updateFieldSecurity = (field: keyof Role['fieldSecurity'], value: boolean) => {
-    if (selectedRole.id === 'admin') return;
+    if (selectedRole?.id === 'admin') return;
     setRoles(roles.map(r => {
       if (r.id === selectedRoleId) {
         return {
@@ -286,10 +366,39 @@ export default function RolesPermissionsSettings() {
     setRoles(roles.map(r => r.id === selectedRoleId ? { ...r, name, description } : r));
   };
 
-  const handleSave = () => {
-    toast.success('Roles and permissions saved successfully');
-    setIsEditingName(false);
+  const handleSave = async () => {
+    if (!selectedRole) return;
+    setLoading(true);
+    try {
+        const payload = {
+            name: selectedRole.name,
+            description: selectedRole.description,
+            is_system: selectedRole.isSystem,
+            permissions: selectedRole.permissions,
+            field_security: selectedRole.fieldSecurity
+        };
+
+        if (selectedRole.id.startsWith('new_')) {
+            const newRole = await settingsService.createRole(payload as any);
+            toast.success('Role created successfully');
+            await loadRoles();
+            setSelectedRoleId(newRole.id);
+        } else {
+            await settingsService.updateRole(selectedRole.id, payload as any);
+            toast.success('Role updated successfully');
+        }
+        setIsEditingName(false);
+    } catch (error) {
+        console.error('Error saving role:', error);
+        toast.error('Failed to save role');
+    } finally {
+        setLoading(false);
+    }
   };
+
+  if (loading && roles.length === 0) {
+      return <div>Loading...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -308,10 +417,11 @@ export default function RolesPermissionsSettings() {
         </div>
         <button
           onClick={handleSave}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700"
+          disabled={loading}
+          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 disabled:opacity-50"
         >
           <Save className="h-4 w-4 mr-2" />
-          Save Changes
+          {loading ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
 
@@ -358,6 +468,7 @@ export default function RolesPermissionsSettings() {
         </div>
 
         {/* Main Content: Permissions Matrix */}
+        {selectedRole && (
         <div className="flex-1 bg-white shadow rounded-lg overflow-hidden flex flex-col">
           <div className="p-6 border-b border-gray-200">
             <div className="flex justify-between items-start">
@@ -507,6 +618,7 @@ export default function RolesPermissionsSettings() {
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
