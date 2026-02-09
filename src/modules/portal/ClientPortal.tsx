@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { FileText, CheckSquare, PenTool, DollarSign, Star, Layout, Lock, Download, ClipboardList, CreditCard, CheckCircle, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react';
 import { portalService } from '../../services/portalService';
+import { questionnaireService } from '../../services/questionnaireService';
 import { clientService } from '../../services/clientService';
 import { eventService } from '../../services/eventService';
 import { venueService } from '../../services/venueService';
@@ -11,7 +12,6 @@ import { tokenService } from '../../services/tokenService';
 import { formatCurrency, formatDocumentID } from '../../utils/formatters';
 import { currencyService } from '../../services/currencyService';
 import { CONTRACT_HEADER_HTML } from '../../constants/contractTemplate';
-import type { ContractContentBlock, ContractInvoiceScheduleItem, ContractTextSegment } from '../contracts/ContractPDF';
 import {
   buildContractInvoiceSchedule,
   hydrateContractContent,
@@ -553,6 +553,46 @@ export default function ClientPortal() {
       toast.error('Failed to generate PDF');
     } finally {
       setQuoteDownloading(false);
+    }
+  };
+
+  const handleStartQuestionnaire = () => {
+    if (!selectedQuestionnaire) return;
+    setIsFillingQuestionnaire(true);
+  };
+
+  const submitQuestionnaire = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedQuestionnaire) return;
+
+    try {
+      setProcessing(true);
+      const formData = new FormData(e.currentTarget);
+      const answers = Array.from(formData.entries())
+        .map(([question_id, value]) => ({
+          question_id,
+          answer: typeof value === 'string' ? value : value.name,
+        }))
+        .filter((item) => item.answer.trim().length > 0);
+
+      await questionnaireService.saveAnswers(selectedQuestionnaire.id, answers);
+      toast.success('Questionnaire submitted');
+      setIsFillingQuestionnaire(false);
+      if (portalClientId) {
+        await loadPortalData(portalClientId);
+      }
+      setSelectedQuestionnaire(null);
+      setNextStepPrompt({
+        title: 'Questionnaire submitted',
+        message: 'Thanks for the details! You can now review and sign your contract.',
+        actionLabel: 'Review contract',
+        nextTab: 'contracts'
+      });
+    } catch (error) {
+      console.error('Error submitting questionnaire:', error);
+      toast.error('Failed to submit questionnaire');
+    } finally {
+      setProcessing(false);
     }
   };
 

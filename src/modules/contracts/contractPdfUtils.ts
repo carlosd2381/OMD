@@ -82,10 +82,11 @@ export function parseContractContentBlocks(html: string): ContractContentBlock[]
     const segments: ContractTextSegment[] = [];
     const walk = (node: ChildNode, active?: ContractTextSegment) => {
       if (node.nodeType === Node.TEXT_NODE) {
-        const normalized = node.textContent?.replace(/\s+/g, ' ');
-        if (normalized && normalized.trim()) {
+        const normalized = (node.textContent ?? '').replace(/\s+/g, ' ');
+        const trimmed = normalized.trim();
+        if (trimmed) {
           segments.push({
-            text: normalized,
+            text: trimmed,
             bold: active?.bold,
             italic: active?.italic,
             underline: active?.underline,
@@ -114,7 +115,7 @@ export function parseContractContentBlocks(html: string): ContractContentBlock[]
 
   const walkNodes = (node: ChildNode) => {
     if (node.nodeType !== Node.ELEMENT_NODE) {
-      const raw = node.textContent?.replace(/\s+/g, ' ').trim();
+      const raw = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
       if (raw) {
         pushBlock({ type: 'paragraph', text: raw });
       }
@@ -130,7 +131,7 @@ export function parseContractContentBlocks(html: string): ContractContentBlock[]
       case 'h4':
       case 'h5':
       case 'h6': {
-        const text = el.textContent?.replace(/\s+/g, ' ').trim();
+        const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
         if (text) {
           pushBlock({ type: 'heading', level: Number(tag.replace('h', '')) || 3, text });
         }
