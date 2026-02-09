@@ -110,6 +110,29 @@ This document serves as the central reference for all data entities, their field
 | Guest Count | `guest_count` | number | No | |
 | Budget | `budget` | number | No | |
 | Notes | `notes` | string | No | |
+| Hashtag | `hashtag` | string | No | |
+| Dietary Restrictions | `dietary_restrictions` | string | No | |
+| Meet/Load Time | `meet_load_time` | string | No | |
+| Leave Time | `leave_time` | string | No | |
+| Arrive Venue Time | `arrive_venue_time` | string | No | |
+| Setup Time | `setup_time` | string | No | |
+| Start Time | `start_time` | string | No | |
+| End Time | `end_time` | string | No | |
+| Venue Contact ID | `venue_contact_id` | string | No | |
+| Venue Address | `venue_address` | string | No | |
+| Venue Contact Name | `venue_contact_name` | string | No | |
+| Venue Contact Phone | `venue_contact_phone` | string | No | |
+| Venue Contact Email | `venue_contact_email` | string | No | |
+| Venue Sub Location | `venue_sub_location` | string | No | |
+| Planner Company | `planner_company` | string | No | |
+| Planner Name | `planner_name` | string | No | |
+| Planner First Name | `planner_first_name` | string | No | |
+| Planner Last Name | `planner_last_name` | string | No | |
+| Planner Email | `planner_email` | string | No | |
+| Planner Phone | `planner_phone` | string | No | |
+| Planner Instagram | `planner_instagram` | string | No | |
+| Day of Contact Name | `day_of_contact_name` | string | No | |
+| Day of Contact Phone | `day_of_contact_phone` | string | No | |
 
 ### Notes (`notes` table)
 *Ref: `src/types/note.ts`*
@@ -139,6 +162,7 @@ This document serves as the central reference for all data entities, their field
 | Client | `client_id` | uuid | Yes | Foreign Key |
 | Event | `event_id` | uuid | Yes | Foreign Key |
 | Items | `items` | jsonb | Yes | Array of {description, quantity, unit_price, total} |
+| Taxes | `taxes` | jsonb | No | Array of {name, rate, amount, is_retention}; MXN amounts, retentions stored as negative |
 | Total Amount | `total_amount` | number | Yes | Stored in MXN |
 | Currency | `currency` | enum | Yes | MXN, USD, GBP, EUR, CAD |
 | Exchange Rate | `exchange_rate` | number | Yes | Rate at time of creation (MXN base) |
@@ -202,9 +226,12 @@ This document serves as the central reference for all data entities, their field
 | :--- | :--- | :--- | :--- | :--- |
 | Client | `client_id` | uuid | Yes | Foreign Key |
 | Event | `event_id` | uuid | Yes | Foreign Key |
+| Quote | `quote_id` | uuid | No | Links back to originating quote |
 | Content | `content` | text | Yes | HTML/Markdown |
 | Status | `status` | enum | Yes | draft, sent, signed |
 | Signed At | `signed_at` | timestamp | No | |
+| Signature Metadata | `signature_metadata` | jsonb | No | Stores signer IP, user agent, timestamps, fingerprints |
+| Document Version | `document_version` | integer | Yes | Defaults to 1 for versioned footer |
 
 ### Invoices (`invoices` table)
 *Ref: `src/types/invoice.ts`*
@@ -367,6 +394,66 @@ To prevent "mapping errors":
 | Last Login | `last_login` | timestamp | No | |
 | Security Config | `security_config` | jsonb | No | {2fa_enabled, password_changed_at} |
 
+### Staff Profiles (`staff_profiles` table)
+*Ref: `src/modules/staff/StaffProfileDetails.tsx`*
+| UI Label | Field Name (Code/DB) | Type | Required | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| User ID | `user_id` | uuid | Yes | Foreign Key to `users.id` |
+| First Name | `first_name` | string | No | Overrides default derived from `users.name` |
+| Last Name | `last_name` | string | No | |
+| Phone | `phone` | string | No | |
+| Address | `address` | string | No | Street + city |
+| Date of Birth | `date_of_birth` | date | No | |
+| ID Type | `id_type` | enum | No | INE, Passport, Driver License, Other |
+| ID Number | `id_number` | string | No | |
+| ID Expiration | `id_expiration_date` | date | No | |
+| ID Front Upload | `id_front_url` | string | No | Supabase storage path |
+| ID Back Upload | `id_back_url` | string | No | Supabase storage path |
+| Bank Name | `bank_name` | string | No | e.g., BBVA, Santander |
+| Card Number | `card_number` | string | No | Mask in UI when displaying |
+| CLABE | `clabe` | string | No | 18-digit MX interbank key |
+| Account Number | `account_number` | string | No | Internal reference or last 4 |
+| Is Driver | `is_driver` | boolean | No | Default false |
+| (System) | `created_at` | timestamp | Yes | |
+| (System) | `updated_at` | timestamp | Yes | |
+
+### Staff Pay Rates (`staff_pay_rates` table)
+| UI Label | Field Name (Code/DB) | Type | Required | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Position Key | `position_key` | string | Yes | Canonical role slug (e.g., `driver_a`, `sales_logistics_1`). |
+| Position Label | `position_label` | string | Yes | Human readable label shown in UI. |
+| Rate Type | `rate_type` | enum | Yes | `flat`, `per_direction`, `percent_revenue`, `tiered_hours`, `tiered_quantity`. |
+| Config | `config` | jsonb | Yes | Rule payload (amounts, default units, overtime rates, etc.). |
+| Notes | `notes` | text | No | Internal documentation for finance team. |
+| (System) | `id` | uuid | Yes | Primary Key |
+| (System) | `created_at` | timestamp | Yes | |
+| (System) | `updated_at` | timestamp | Yes | |
+
+### Event Staff Assignments (`event_staff_assignments` table)
+| UI Label | Field Name (Code/DB) | Type | Required | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Event | `event_id` | uuid | Yes | Foreign Key |
+| Staff | `staff_id` | uuid | Yes | Foreign Key to `users.id` |
+| Role | `role` | string | Yes | Display label (Driver A, Operator 1, etc.) |
+| Status | `status` | enum | Yes | pending, confirmed, declined, completed |
+| Start Time | `start_time` | timestamp | No | Shift start (optional) |
+| End Time | `end_time` | timestamp | No | Shift end (optional) |
+| Hours Worked | `hours_worked` | number | No | Used for hourly/tiered rules |
+| Pay Type | `pay_type` | enum | Yes | flat, hourly |
+| Pay Rate | `pay_rate` | number | No | Base rate or per-unit amount |
+| Total Pay | `total_pay` | number | No | Calculated payout for the assignment |
+| Pay Rule | `pay_rate_id` | uuid | No | FK to `staff_pay_rates.id` used for defaulting |
+| Compensation Config | `compensation_config` | jsonb | No | Overrides (directions, kg, manual total, etc.) |
+| Paid? | `is_paid` | boolean | Yes | |
+| Paid At | `paid_at` | timestamp | No | |
+| Payroll Run | `payroll_run_id` | uuid | No | Links to `payroll_runs.id` |
+| Payment Method | `payment_method` | string | No | cash, transfer, etc. |
+| From Account | `from_account` | string | No | Funding source |
+| To Account | `to_account` | string | No | Destination account |
+| Reference | `payment_reference` | string | No | e.g., RUN-2026-03 |
+| (System) | `created_at` | timestamp | Yes | |
+| (System) | `updated_at` | timestamp | Yes | |
+
 ### User Sessions (`user_sessions` table)
 *Ref: `src/modules/settings/UserManagementSettings.tsx`*
 | UI Label | Field Name (Code/DB) | Type | Required | Notes |
@@ -395,6 +482,8 @@ To prevent "mapping errors":
 | Signature | `signature` | text | No | HTML signature |
 | Notifications | `notifications` | jsonb | Yes | { event_type: { email, in_app, sms, push } } |
 | SMS Config | `sms_config` | jsonb | No | { provider, sid, token, phone } |
+
+> Current notification keys: `quoteSent`, `newLead`, `contractSigned`, `invoicePaid`, and `eventReminder`.
 
 ### Automations (`workflows` table)
 *Ref: `src/modules/settings/AutomationSettings.tsx`*

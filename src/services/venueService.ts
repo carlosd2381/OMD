@@ -27,23 +27,23 @@ export const venueService = {
   },
 
   async createVenue(venue: CreateVenueDTO): Promise<Venue> {
+    // Clean up empty strings to nulls for optional fields
+    const cleanVenue = {
+      ...venue,
+      venue_area: venue.venue_area || null,
+      website: venue.website || null,
+      phone: venue.phone || null,
+      instagram: venue.instagram || null,
+      facebook: venue.facebook || null,
+      notes: venue.notes || null,
+      google_place_id: venue.google_place_id || null,
+      map_url: venue.map_url || null,
+      is_preferred: venue.is_preferred || false,
+    };
+
     const { data, error } = await supabase
       .from('venues')
-      .insert({
-        name: venue.name,
-        address: venue.address,
-        city: venue.city,
-        state: venue.state,
-        zip_code: venue.zip_code,
-        country: venue.country,
-        venue_area: venue.venue_area,
-        email: venue.email,
-        phone: venue.phone,
-        website: venue.website,
-        instagram: venue.instagram,
-        facebook: venue.facebook,
-        notes: venue.notes
-      })
+      .insert(cleanVenue)
       .select()
       .single();
 
@@ -69,6 +69,23 @@ export const venueService = {
   },
 
   async deleteVenue(id: string): Promise<void> {
+    // First delete associated contacts
+    const { error: contactError } = await supabase
+      .from('venue_contacts')
+      .delete()
+      .eq('venue_id', id);
+
+    if (contactError) throw contactError;
+
+    // Unlink associated events (set venue_id to null)
+    const { error: eventError } = await supabase
+      .from('events')
+      .update({ venue_id: null })
+      .eq('venue_id', id);
+
+    if (eventError) throw eventError;
+
+    // Then delete the venue
     const { error } = await supabase
       .from('venues')
       .delete()
@@ -87,6 +104,19 @@ export const venueService = {
     if (error) throw error;
 
     return (data || []).map(mapToVenueContact);
+  },
+
+  async getVenueContact(id: string): Promise<VenueContact | null> {
+    const { data, error } = await supabase
+      .from('venue_contacts')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return mapToVenueContact(data);
   },
 
   async createVenueContact(contact: CreateVenueContactDTO): Promise<VenueContact> {
@@ -140,6 +170,13 @@ function mapToVenue(data: any): Venue {
     instagram: data.instagram || undefined,
     facebook: data.facebook || undefined,
     notes: data.notes || undefined,
+    google_place_id: data.google_place_id || undefined,
+    latitude: data.latitude || undefined,
+    longitude: data.longitude || undefined,
+    travel_distance_km: data.travel_distance_km ?? undefined,
+    travel_time_mins: data.travel_time_mins ?? undefined,
+    flete_fee: data.flete_fee ?? undefined,
+    map_url: data.map_url || undefined,
     updated_at: data.created_at // Fallback
   };
 }

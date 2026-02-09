@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase';
-import type { Contract } from '../types/contract';
+import { activityLogService } from './activityLogService';
+import { emailNotificationService } from './emailNotificationService';
+import type { Contract, SignatureMetadata } from '../types/contract';
 
 export const contractService = {
   getContractsByClient: async (clientId: string): Promise<Contract[]> => {
@@ -14,13 +16,30 @@ export const contractService = {
     return (data || []).map(mapToContract);
   },
 
-  updateStatus: async (id: string, status: Contract['status']): Promise<Contract | null> => {
+  updateStatus: async (id: string, status: Contract['status'], signedBy?: string, signatureMetadata?: SignatureMetadata): Promise<Contract | null> => {
+    const updates: any = {
+      status,
+      // updated_at: new Date().toISOString() // TODO: Add updated_at column to DB
+    };
+
+    if (status === 'signed') {
+      updates.signed_at = new Date().toISOString();
+      if (signedBy) {
+        updates.signed_by = signedBy;
+      }
+      if (signatureMetadata) {
+        updates.signature_metadata = signatureMetadata;
+      }
+    } else {
+      // Reset signature if status is not signed
+      updates.signed_at = null;
+      updates.signed_by = null;
+      updates.signature_metadata = null;
+    }
+
     const { data, error } = await supabase
       .from('contracts')
-      .update({
-        status,
-        // updated_at: new Date().toISOString() // TODO: Add updated_at column to DB
-      })
+      .update(updates)
       .eq('id', id)
       .select()
       .single();
@@ -28,7 +47,24 @@ export const contractService = {
     if (error) throw error;
     if (!data) return null;
 
-    return mapToContract(data);
+    const updatedContract = mapToContract(data);
+
+    await activityLogService.logActivity({
+      entity_id: updatedContract.client_id,
+      entity_type: 'client',
+      action: 'Contract Status Updated',
+      details: `Contract status updated to ${status}`,
+    });
+
+    if (status === 'signed') {
+      try {
+        await emailNotificationService.sendContractSignedNotification(updatedContract);
+      } catch (notificationError) {
+        console.error('Failed to send contract notification email:', notificationError);
+      }
+    }
+
+    return updatedContract;
   }
 };
 
@@ -38,6 +74,8 @@ function mapToContract(data: any): Contract {
   return {
     ...data,
     status: data.status as Contract['status'],
+    signature_metadata: data.signature_metadata as SignatureMetadata | undefined,
+    document_version: data.document_version ?? 1,
     updated_at: data.created_at // Fallback
   };
 }

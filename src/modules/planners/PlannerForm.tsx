@@ -82,14 +82,14 @@ export default function PlannerForm() {
           onClick={() => navigate('/planners')}
           className="p-2 rounded-full hover:bg-gray-100"
         >
-          <ArrowLeft className="h-6 w-6 text-gray-500" />
+          <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">
           {isEditMode ? 'Edit Planner' : 'New Planner'}
         </h1>
       </div>
 
-      <div className="bg-white shadow px-4 py-5 sm:rounded-lg sm:p-6">
+      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow px-4 py-5 sm:rounded-lg sm:p-6">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
             <div className="sm:col-span-3">
@@ -101,7 +101,7 @@ export default function PlannerForm() {
                   type="text"
                   id="first_name"
                   {...register('first_name')}
-                  className="shadow-sm focus:ring-pink-500 focus:border-pink-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
                 />
                 {errors.first_name && (
                   <p className="mt-1 text-sm text-red-600">{errors.first_name.message}</p>
@@ -118,7 +118,7 @@ export default function PlannerForm() {
                   type="text"
                   id="last_name"
                   {...register('last_name')}
-                  className="shadow-sm focus:ring-pink-500 focus:border-pink-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
                 />
                 {errors.last_name && (
                   <p className="mt-1 text-sm text-red-600">{errors.last_name.message}</p>
@@ -135,7 +135,7 @@ export default function PlannerForm() {
                   id="email"
                   type="email"
                   {...register('email')}
-                  className="shadow-sm focus:ring-pink-500 focus:border-pink-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
                 />
                 {errors.email && (
                   <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
@@ -152,7 +152,7 @@ export default function PlannerForm() {
                   type="text"
                   id="phone"
                   {...register('phone')}
-                  className="shadow-sm focus:ring-pink-500 focus:border-pink-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
                 />
               </div>
             </div>
@@ -166,7 +166,7 @@ export default function PlannerForm() {
                   type="text"
                   id="company"
                   {...register('company')}
-                  className="shadow-sm focus:ring-pink-500 focus:border-pink-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
                 />
               </div>
             </div>
@@ -180,7 +180,7 @@ export default function PlannerForm() {
                   type="text"
                   id="website"
                   {...register('website')}
-                  className="shadow-sm focus:ring-pink-500 focus:border-pink-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
                   placeholder="https://example.com"
                 />
               </div>
@@ -195,7 +195,7 @@ export default function PlannerForm() {
                   type="text"
                   id="instagram"
                   {...register('instagram')}
-                  className="shadow-sm focus:ring-pink-500 focus:border-pink-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
                   placeholder="@username"
                 />
               </div>
@@ -210,7 +210,7 @@ export default function PlannerForm() {
                   type="text"
                   id="facebook"
                   {...register('facebook')}
-                  className="shadow-sm focus:ring-pink-500 focus:border-pink-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
                   placeholder="Profile URL or Username"
                 />
               </div>
@@ -221,14 +221,14 @@ export default function PlannerForm() {
             <button
               type="button"
               onClick={() => navigate('/planners')}
-              className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+              className="bg-white dark:bg-gray-800 dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 disabled:opacity-50"
+              className="ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
             >
               {loading ? 'Saving...' : 'Save'}
             </button>

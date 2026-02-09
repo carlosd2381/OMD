@@ -121,11 +121,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  colNo: { width: '8%', textAlign: 'center' },
-  colDesc: { width: '52%' },
-  colQty: { width: '10%', textAlign: 'center' },
-  colPrice: { width: '15%', textAlign: 'right' },
-  colAmount: { width: '15%', textAlign: 'right' },
+  colDesc: { width: '55%' },
+  colQty: { width: '15%', textAlign: 'center', justifyContent: 'center' },
+  colPrice: { width: '15%' },
+  colAmount: { width: '15%' },
   
   tableHeaderText: {
     fontSize: 9,
@@ -136,6 +135,32 @@ const styles = StyleSheet.create({
   tableCell: {
     fontSize: 9,
     color: '#333',
+  },
+  currencyStack: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
+  currencyStackLeft: {
+    alignItems: 'flex-start',
+  },
+  currencyPrimary: {
+    fontSize: 9,
+    color: '#333',
+  },
+  currencySecondary: {
+    fontSize: 7,
+    color: '#777',
+    marginTop: 2,
+  },
+  amountCell: {
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+  },
+  textRight: {
+    textAlign: 'right',
+  },
+  textCenter: {
+    textAlign: 'center',
   },
   
   footerSection: {
@@ -186,11 +211,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
-  totalValue: {
-    fontSize: 9,
-    textAlign: 'right',
-  },
-  
   signatureSection: {
     marginTop: 50,
     flexDirection: 'row',
@@ -264,6 +284,27 @@ export const QuotePDF = ({ quote, client, branding, items, totals, quoteNumber }
     }).format(amount);
   };
 
+  const exchangeRate = quote.currency === 'MXN' ? 1 : (quote.exchange_rate || 1);
+  const safeRate = exchangeRate > 0 ? exchangeRate : 1;
+  const showConverted = quote.currency !== 'MXN' && safeRate > 0;
+
+  const renderCurrencyStack = (amount: number, align: 'left' | 'right' = 'right') => {
+    const stackStyle = align === 'left'
+      ? [styles.currencyStack, styles.currencyStackLeft]
+      : [styles.currencyStack];
+
+    return (
+      <View style={stackStyle}>
+        <Text style={styles.currencyPrimary}>{formatCurrency(amount, 'MXN')}</Text>
+        {showConverted && (
+          <Text style={styles.currencySecondary}>
+            ≈ {formatCurrency(amount / safeRate, quote.currency)} ({quote.currency})
+          </Text>
+        )}
+      </View>
+    );
+  };
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -272,7 +313,7 @@ export const QuotePDF = ({ quote, client, branding, items, totals, quoteNumber }
           <View style={styles.headerLeft}>
             <Text style={styles.title}>PRICE QUOTE</Text>
             <Text style={styles.companyName}>{branding?.company_name || 'Oh My Desserts MX'}</Text>
-            <Text style={styles.companyInfo}>Gran Santa Fe III, Benito Juarez, Quintana Roo, 77535</Text>
+            <Text style={styles.companyInfo}>Priv. Palmilla, Jardines del Sur II, Benito Juarez, Quintana Roo, 77535</Text>
             <Text style={styles.companyInfo}>www.ohmydessertsmx.com | info@ohmydessertsmx.com</Text>
           </View>
           <View style={styles.logoContainer}>
@@ -311,25 +352,45 @@ export const QuotePDF = ({ quote, client, branding, items, totals, quoteNumber }
               <Text style={styles.detailLabel}>VALID UNTIL:</Text>
               <Text style={styles.detailValue}>{formatDate(quote.valid_until)}</Text>
             </View>
+            {showConverted && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>EXCHANGE RATE:</Text>
+                <Text style={styles.detailValue}>1 {quote.currency} ≈ {formatCurrency(safeRate, 'MXN')}</Text>
+              </View>
+            )}
           </View>
         </View>
 
         {/* Table */}
         <View style={styles.table}>
           <View style={styles.tableHeader}>
-            <Text style={[styles.colNo, styles.tableHeaderText]}>NO</Text>
-            <Text style={[styles.colDesc, styles.tableHeaderText]}>DESCRIPTION</Text>
-            <Text style={[styles.colQty, styles.tableHeaderText]}>QTY</Text>
-            <Text style={[styles.colPrice, styles.tableHeaderText]}>PRICE</Text>
-            <Text style={[styles.colAmount, styles.tableHeaderText]}>AMOUNT</Text>
+            <View style={styles.colDesc}>
+              <Text style={styles.tableHeaderText}>DESCRIPTION</Text>
+            </View>
+            <View style={styles.colQty}>
+              <Text style={styles.tableHeaderText}>QTY</Text>
+            </View>
+            <View style={styles.colPrice}>
+              <Text style={[styles.tableHeaderText, styles.textRight]}>PRICE</Text>
+            </View>
+            <View style={styles.colAmount}>
+              <Text style={[styles.tableHeaderText, styles.textRight]}>AMOUNT</Text>
+            </View>
           </View>
-          {items.map((item, index) => (
+          {items.map((item) => (
             <View key={item.id} style={styles.tableRow}>
-              <Text style={[styles.colNo, styles.tableCell]}>{index + 1}</Text>
-              <Text style={[styles.colDesc, styles.tableCell]}>{item.description}</Text>
-              <Text style={[styles.colQty, styles.tableCell]}>{item.quantity}</Text>
-              <Text style={[styles.colPrice, styles.tableCell]}>{formatCurrency(item.unit_price, quote.currency)}</Text>
-              <Text style={[styles.colAmount, styles.tableCell]}>{formatCurrency(item.total, quote.currency)}</Text>
+              <View style={styles.colDesc}>
+                <Text style={[styles.tableCell]}>{item.description}</Text>
+              </View>
+              <View style={styles.colQty}>
+                <Text style={[styles.tableCell, styles.textCenter]}>{item.quantity}</Text>
+              </View>
+              <View style={[styles.colPrice, styles.amountCell]}>
+                {renderCurrencyStack(item.unit_price)}
+              </View>
+              <View style={[styles.colAmount, styles.amountCell]}>
+                {renderCurrencyStack(item.total)}
+              </View>
             </View>
           ))}
         </View>
@@ -339,34 +400,35 @@ export const QuotePDF = ({ quote, client, branding, items, totals, quoteNumber }
           <View style={styles.termsBox}>
             <Text style={styles.termsTitle}>TERMS & CONDITIONS</Text>
             <Text style={styles.termsText}>
-              This quotation is not a Contract/Receipt/Invoice. It's our best guess of the Total Prices for the Products/Services described above. The customer will be charged after the acceptance of this quote. Payment will be due before delivery of Products/Services.
+              This quote is an estimate based on the event details provided and is subject to our standard Catering Services Agreement. Final pricing may vary if guest count, service time, location, or menu selections change.
+            </Text>
+            <Text style={[styles.termsText, { marginTop: 6 }]}>
+              The booking is only confirmed once the corresponding contract is signed and the required retainer is received. By accepting this quote, the client acknowledges that all services will be provided in accordance with the terms and conditions set out in the Catering Services Agreement.
             </Text>
           </View>
           <View style={styles.totalsSection}>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>SUBTOTAL</Text>
-              <Text style={styles.totalValue}>{formatCurrency(totals.subtotal, quote.currency)}</Text>
+              {renderCurrencyStack(totals.subtotal)}
             </View>
             
             {quote.taxes && quote.taxes.length > 0 ? (
               quote.taxes.map((tax, index) => (
                 <View style={styles.totalRow} key={index}>
                   <Text style={styles.totalLabel}>{tax.name} ({tax.rate}%)</Text>
-                  <Text style={styles.totalValue}>
-                    {tax.is_retention ? '-' : ''}{formatCurrency(tax.amount, quote.currency)}
-                  </Text>
+                  {renderCurrencyStack(tax.is_retention ? -tax.amount : tax.amount)}
                 </View>
               ))
             ) : (
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>TAX</Text>
-                <Text style={styles.totalValue}>{formatCurrency(totals.tax, quote.currency)}</Text>
+                {renderCurrencyStack(totals.tax)}
               </View>
             )}
 
             <View style={styles.totalRowFinal}>
               <Text style={styles.totalLabel}>AMOUNT DUE</Text>
-              <Text style={styles.totalValue}>{formatCurrency(totals.total, quote.currency)}</Text>
+              {renderCurrencyStack(totals.total)}
             </View>
           </View>
         </View>

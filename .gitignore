@@ -25,3 +25,14 @@ dist-ssr
 
 # Environment variables
 .env
+
+# Local dumps / scratch files
+schema.sql
+Schema_01212026.md
+TODO.md
+debug_roles.*
+fix_*.sql
+_archive/
+
+# Supabase local temp
+supabase/.temp/

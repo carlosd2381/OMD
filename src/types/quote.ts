@@ -8,6 +8,7 @@ export interface QuoteItem {
   unit_price: number; // In MXN
   cost: number; // COG in MXN
   total: number; // In MXN
+  is_taxable?: boolean; // Default true
 }
 
 export interface QuoteTax {

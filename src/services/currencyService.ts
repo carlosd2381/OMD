@@ -43,5 +43,42 @@ export const currencyService = {
       CAD: 12.80,
     };
     return rates[targetCurrency];
+  },
+
+  fetchLiveRate: async (targetCurrency: CurrencyCode): Promise<number | null> => {
+    if (targetCurrency === 'MXN') return 1;
+
+    const tryEndpoints = [
+      `https://api.exchangerate.host/convert?from=${targetCurrency}&to=MXN&amount=1`,
+      `https://api.exchangerate.host/latest?base=${targetCurrency}&symbols=MXN`,
+      `https://open.er-api.com/v6/latest/${targetCurrency}`,
+    ];
+
+    for (const url of tryEndpoints) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) continue;
+        const data = await response.json();
+
+        // Handle convert endpoint shape
+        if (typeof data?.result === 'number' && data.result > 0) {
+          return data.result;
+        }
+
+        // Handle latest endpoint shape
+        if (typeof data?.rates?.MXN === 'number' && data.rates.MXN > 0) {
+          return data.rates.MXN;
+        }
+
+        // Handle open.er-api shape (result === "success")
+        if (data?.result === 'success' && typeof data?.rates?.MXN === 'number') {
+          return data.rates.MXN;
+        }
+      } catch (error) {
+        console.warn('currencyService.fetchLiveRate endpoint error', url, error);
+      }
+    }
+
+    return null;
   }
 };

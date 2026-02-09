@@ -1,4 +1,7 @@
 import { supabase } from '../lib/supabase';
+import { activityLogService } from './activityLogService';
+import { formatCurrency } from '../utils/formatters';
+import { emailNotificationService } from './emailNotificationService';
 import type { Quote, QuoteItem, QuoteTax } from '../types/quote';
 import type { Database } from '../types/supabase';
 
@@ -69,7 +72,25 @@ export const quoteService = {
       .single();
 
     if (error) throw error;
-    return mapToQuote(data);
+    
+    const updatedQuote = mapToQuote(data);
+    
+    await activityLogService.logActivity({
+      entity_id: updatedQuote.client_id,
+      entity_type: 'client',
+      action: 'Quote Status Updated',
+      details: `Quote status updated to ${status}`,
+    });
+
+    if (status === 'sent') {
+      try {
+        await emailNotificationService.sendQuoteSentNotification(updatedQuote);
+      } catch (notificationError) {
+        console.error('Failed to send quote notification email:', notificationError);
+      }
+    }
+
+    return updatedQuote;
   },
 
   createQuote: async (quote: Omit<Quote, 'id' | 'created_at' | 'updated_at'>): Promise<Quote> => {
@@ -77,6 +98,7 @@ export const quoteService = {
       client_id: quote.client_id,
       event_id: quote.event_id,
       items: quote.items as unknown as Database['public']['Tables']['quotes']['Insert']['items'],
+      taxes: quote.taxes as unknown as Database['public']['Tables']['quotes']['Insert']['taxes'],
       currency: quote.currency,
       exchange_rate: quote.exchange_rate,
       total_amount: quote.total_amount,
@@ -94,6 +116,14 @@ export const quoteService = {
       .single();
 
     if (error) throw error;
+
+    await activityLogService.logActivity({
+      entity_id: quote.client_id,
+      entity_type: 'client',
+      action: 'Quote Created',
+      details: `Quote created for ${formatCurrency(quote.total_amount, quote.currency)}`,
+    });
+
     return mapToQuote(data);
   },
 
@@ -102,6 +132,9 @@ export const quoteService = {
       client_id: quote.client_id,
       event_id: quote.event_id,
       items: quote.items ? (quote.items as unknown as Database['public']['Tables']['quotes']['Update']['items']) : undefined,
+      taxes: quote.taxes !== undefined
+        ? (quote.taxes as unknown as Database['public']['Tables']['quotes']['Update']['taxes'])
+        : undefined,
       currency: quote.currency,
       exchange_rate: quote.exchange_rate,
       total_amount: quote.total_amount,

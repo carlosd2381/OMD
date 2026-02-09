@@ -33,7 +33,25 @@ export const activityLogService = {
   logActivity: async (log: CreateActivityLogDTO): Promise<ActivityLog> => {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
-    const createdBy = user?.email || 'System';
+    
+    let createdBy = 'System';
+
+    if (user) {
+      // Try to get name from public.users
+      const { data: profile } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.name) {
+        createdBy = profile.name;
+      } else if (user.user_metadata?.full_name) {
+        createdBy = user.user_metadata.full_name;
+      } else if (user.email) {
+        createdBy = user.email;
+      }
+    }
 
     const dbLog: ActivityLogInsert = {
       entity_id: log.entity_id,

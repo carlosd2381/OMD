@@ -1,7 +1,17 @@
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/supabase';
 
-export type BrandingSettings = Database['public']['Tables']['branding_settings']['Row'];
+export type BrandingSettings = Database['public']['Tables']['branding_settings']['Row'] & {
+  address?: string;
+  website?: string;
+  email?: string;
+  phone?: string;
+  instagram?: string;
+  facebook?: string;
+  tiktok?: string;
+  latitude?: number;
+  longitude?: number;
+};
 export type CalendarSettings = Database['public']['Tables']['calendar_settings']['Row'];
 export type EmailSettings = Database['public']['Tables']['email_settings']['Row'];
 export type FinancialSettings = Database['public']['Tables']['financial_settings']['Row'];
@@ -11,6 +21,34 @@ export type ContactForm = Database['public']['Tables']['contact_forms']['Row'];
 export type ExpenseCategory = Database['public']['Tables']['expense_categories']['Row'];
 export type Role = Database['public']['Tables']['roles']['Row'];
 export type Token = Database['public']['Tables']['tokens']['Row'];
+export type SocialIntegration = {
+  id: string;
+  platform: 'facebook' | 'instagram';
+  page_id: string;
+  page_name?: string | null;
+  access_token: string;
+  webhook_secret?: string | null;
+  is_active: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export interface DeliverySettings {
+  id: string;
+  hq_address?: string;
+  fuel_consumption?: number;
+  fuel_price?: number;
+  cost_per_km: number; // Base Fee (MXN/km)
+  setup_time?: number;
+  buffer_time?: number;
+  
+  // Legacy fields (kept for compatibility)
+  base_fee: number;
+  free_radius_km: number;
+  min_fee: number;
+  
+  created_at?: string;
+}
 
 export const settingsService = {
   // Branding
@@ -85,6 +123,43 @@ export const settingsService = {
       result = data;
     }
     return result;
+  },
+
+  // Delivery
+  getDeliverySettings: async (): Promise<DeliverySettings | null> => {
+    const { data, error } = await (supabase as any)
+      .from('delivery_settings')
+      .select('*')
+      .limit(1)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data as DeliverySettings | null;
+  },
+
+  updateDeliverySettings: async (settings: Partial<DeliverySettings>): Promise<DeliverySettings> => {
+    const existing = await settingsService.getDeliverySettings();
+    
+    let result;
+    if (existing) {
+      const { data, error } = await (supabase as any)
+        .from('delivery_settings')
+        .update(settings)
+        .eq('id', existing.id)
+        .select()
+        .single();
+      if (error) throw error;
+      result = data;
+    } else {
+      const { data, error } = await (supabase as any)
+        .from('delivery_settings')
+        .insert(settings)
+        .select()
+        .single();
+      if (error) throw error;
+      result = data;
+    }
+    return result as DeliverySettings;
   },
 
   // Email
@@ -302,6 +377,40 @@ export const settingsService = {
   },
   deleteToken: async (id: string): Promise<void> => {
     const { error } = await supabase.from('tokens').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // Social Integrations
+  getSocialIntegrations: async (): Promise<SocialIntegration[]> => {
+    const { data, error } = await supabase
+      .from('social_integrations')
+      .select('*')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  },
+  saveSocialIntegration: async (item: Partial<SocialIntegration>): Promise<SocialIntegration> => {
+    if (item.id) {
+      const { data, error } = await supabase
+        .from('social_integrations')
+        .update(item)
+        .eq('id', item.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const { data, error } = await supabase
+        .from('social_integrations')
+        .insert(item as any)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }
+  },
+  deleteSocialIntegration: async (id: string): Promise<void> => {
+    const { error } = await supabase.from('social_integrations').delete().eq('id', id);
     if (error) throw error;
   },
 };

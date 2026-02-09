@@ -1,64 +1,110 @@
+import { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import MainLayout from './components/layout/MainLayout';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import { Toaster } from 'react-hot-toast';
-import ClientList from './modules/clients/ClientList';
-import ClientForm from './modules/clients/ClientForm';
-import ClientDetails from './modules/clients/ClientDetails';
+import { BrandingProvider } from './contexts/BrandingContext';
+import { ConfirmProvider } from './contexts/ConfirmContext';
 
-import VenueList from './modules/venues/VenueList';
-import VenueForm from './modules/venues/VenueForm';
-import VenueDetails from './modules/venues/VenueDetails';
+const AuthLayout = lazy(() => import('./modules/auth/AuthLayout'));
+const LoginPage = lazy(() => import('./modules/auth/LoginPage'));
+const ForgotPasswordPage = lazy(() => import('./modules/auth/ForgotPasswordPage'));
+const UpdatePasswordPage = lazy(() => import('./modules/auth/UpdatePasswordPage'));
 
-import PlannerList from './modules/planners/PlannerList';
-import PlannerForm from './modules/planners/PlannerForm';
-import PlannerDetails from './modules/planners/PlannerDetails';
+const MainLayout = lazy(() => import('./components/layout/MainLayout'));
+const Dashboard = lazy(() => import('./modules/dashboard/Dashboard'));
+const Calendar = lazy(() => import('./modules/calendar/Calendar'));
+const TaskList = lazy(() => import('./modules/tasks/TaskList'));
 
-import LeadList from './modules/leads/LeadList';
-import LeadForm from './modules/leads/LeadForm';
-import LeadDetails from './modules/leads/LeadDetails';
+const ClientPortal = lazy(() => import('./modules/portal/ClientPortal'));
+const PublicContactForm = lazy(() => import('./modules/leads/PublicContactForm'));
 
-import EventList from './modules/events/EventList';
-import EventForm from './modules/events/EventForm';
-import EventDetails from './modules/events/EventDetails';
+const ClientList = lazy(() => import('./modules/clients/ClientList'));
+const ClientForm = lazy(() => import('./modules/clients/ClientForm'));
+const ClientDetails = lazy(() => import('./modules/clients/ClientDetails'));
 
-import SettingsPage from './modules/settings/SettingsPage';
-import BrandingSettings from './modules/settings/BrandingSettings';
-import CalendarSettings from './modules/settings/CalendarSettings';
-import FinancialSettings from './modules/settings/FinancialSettings';
-import PaymentMethodSettings from './modules/settings/PaymentMethodSettings';
-import PaymentScheduleSettings from './modules/settings/PaymentScheduleSettings';
-import ContactFormSettings from './modules/settings/ContactFormSettings';
-import ExpenseCategorySettings from './modules/settings/ExpenseCategorySettings';
-import UserManagementSettings from './modules/settings/UserManagementSettings';
-import RolesPermissionsSettings from './modules/settings/RolesPermissionsSettings';
-import TokenManagementSettings from './modules/settings/TokenManagementSettings';
-import TemplateSettings from './modules/settings/TemplateSettings';
-import EmailMessagingSettings from './modules/settings/EmailMessagingSettings';
-import AutomationSettings from './modules/settings/AutomationSettings';
-import ClientPortal from './modules/portal/ClientPortal';
-import QuoteBuilder from './modules/quotes/QuoteBuilder';
-import QuoteViewer from './modules/quotes/QuoteViewer';
-import ProductList from './modules/products/ProductList';
-import BookingQuestionnaire from './modules/questionnaires/BookingQuestionnaire';
-import ContractViewer from './modules/contracts/ContractViewer';
-import InvoiceViewer from './modules/invoices/InvoiceViewer';
-import QuestionnaireViewer from './modules/questionnaires/QuestionnaireViewer';
+const VenueList = lazy(() => import('./modules/venues/VenueList'));
+const VenueForm = lazy(() => import('./modules/venues/VenueForm'));
+const VenueDetails = lazy(() => import('./modules/venues/VenueDetails'));
 
-// Placeholder components for routes
-const Dashboard = () => <h1 className="text-2xl font-bold">Dashboard</h1>;
-const Documents = () => <h1 className="text-2xl font-bold">Documents</h1>;
+const PlannerList = lazy(() => import('./modules/planners/PlannerList'));
+const PlannerForm = lazy(() => import('./modules/planners/PlannerForm'));
+const PlannerDetails = lazy(() => import('./modules/planners/PlannerDetails'));
+
+const LeadList = lazy(() => import('./modules/leads/LeadList'));
+const LeadForm = lazy(() => import('./modules/leads/LeadForm'));
+const LeadDetails = lazy(() => import('./modules/leads/LeadDetails'));
+
+const EventList = lazy(() => import('./modules/events/EventList'));
+const EventForm = lazy(() => import('./modules/events/EventForm'));
+const EventDetails = lazy(() => import('./modules/events/EventDetails'));
+const BookingQuestionnaire = lazy(() => import('./modules/questionnaires/BookingQuestionnaire'));
+
+const QuoteBuilder = lazy(() => import('./modules/quotes/QuoteBuilder'));
+const QuoteViewer = lazy(() => import('./modules/quotes/QuoteViewer'));
+const ContractViewer = lazy(() => import('./modules/contracts/ContractViewer'));
+const InvoiceViewer = lazy(() => import('./modules/invoices/InvoiceViewer'));
+const QuestionnaireViewer = lazy(() => import('./modules/questionnaires/QuestionnaireViewer'));
+
+const ProductList = lazy(() => import('./modules/products/ProductList'));
+
+const StaffList = lazy(() => import('./modules/staff/StaffList'));
+const StaffProfileDetails = lazy(() => import('./modules/staff/StaffProfileDetails'));
+const PayrollList = lazy(() => import('./modules/payroll/PayrollList'));
+const PayrollRunDetails = lazy(() => import('./modules/payroll/PayrollRunDetails'));
+
+const SettingsPage = lazy(() => import('./modules/settings/SettingsPage'));
+const CompanySettings = lazy(() => import('./modules/settings/CompanySettings'));
+const BrandingSettings = lazy(() => import('./modules/settings/BrandingSettings'));
+const DeliverySettings = lazy(() => import('./modules/settings/DeliverySettings'));
+const CalendarSettings = lazy(() => import('./modules/settings/CalendarSettings'));
+const FinancialSettings = lazy(() => import('./modules/settings/FinancialSettings'));
+const PaymentMethodSettings = lazy(() => import('./modules/settings/PaymentMethodSettings'));
+const PaymentScheduleSettings = lazy(() => import('./modules/settings/PaymentScheduleSettings'));
+const ContactFormSettings = lazy(() => import('./modules/settings/ContactFormSettings'));
+const ExpenseCategorySettings = lazy(() => import('./modules/settings/ExpenseCategorySettings'));
+const UserManagementSettings = lazy(() => import('./modules/settings/UserManagementSettings'));
+const RolesPermissionsSettings = lazy(() => import('./modules/settings/RolesPermissionsSettings'));
+const TokenManagementSettings = lazy(() => import('./modules/settings/TokenManagementSettings'));
+const TemplateSettings = lazy(() => import('./modules/settings/TemplateSettings'));
+const EmailMessagingSettings = lazy(() => import('./modules/settings/EmailMessagingSettings'));
+const AutomationSettings = lazy(() => import('./modules/settings/AutomationSettings'));
 
 function App() {
   return (
-    <Router>
-      <Toaster position="top-right" />
-      <Routes>
-        {/* Public/External Routes */}
-        <Route path="/portal/:clientId" element={<ClientPortal />} />
+    <AuthProvider>
+      <BrandingProvider>
+        <ConfirmProvider>
+          <Router>
+            <Toaster position="top-right" />
+            <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-sm text-gray-500">Loading...</div>}>
+            <Routes>
+            {/* Public/External Routes */}
+            <Route path="/portal/:clientId" element={<ClientPortal />} />
+            <Route path="/forms/:formId" element={<PublicContactForm />} />
 
-        {/* Admin Routes */}
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<Dashboard />} />
+          {/* Auth Routes */}
+          <Route path="/auth" element={<AuthLayout />}>
+            <Route path="login" element={<LoginPage />} />
+            <Route path="forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="update-password" element={<UpdatePasswordPage />} />
+          </Route>
+
+          {/* Admin Routes */}
+          <Route path="/" element={
+            <ProtectedRoute>
+              <MainLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<Dashboard />} />
+          <Route path="staff">
+            <Route index element={<StaffList />} />
+            <Route path=":id" element={<StaffProfileDetails />} />
+          </Route>
+          <Route path="payroll">
+            <Route index element={<PayrollList />} />
+            <Route path=":id" element={<PayrollRunDetails />} />
+          </Route>
           <Route path="leads">
             <Route index element={<LeadList />} />
             <Route path="new" element={<LeadForm />} />
@@ -90,6 +136,8 @@ function App() {
             <Route path=":id/edit" element={<EventForm />} />
             <Route path=":eventId/questionnaire" element={<BookingQuestionnaire />} />
           </Route>
+          <Route path="calendar" element={<Calendar />} />
+          <Route path="tasks" element={<TaskList />} />
           <Route path="quotes">
             <Route path="new" element={<QuoteBuilder />} />
             <Route path=":id" element={<QuoteViewer />} />
@@ -99,10 +147,11 @@ function App() {
           <Route path="invoices/:id" element={<InvoiceViewer />} />
           <Route path="questionnaires/:id" element={<QuestionnaireViewer />} />
           <Route path="products" element={<ProductList />} />
-          <Route path="documents/*" element={<Documents />} />
           <Route path="settings">
             <Route index element={<SettingsPage />} />
+            <Route path="company" element={<CompanySettings />} />
             <Route path="branding" element={<BrandingSettings />} />
+            <Route path="delivery" element={<DeliverySettings />} />
             <Route path="calendar" element={<CalendarSettings />} />
             <Route path="financial" element={<FinancialSettings />} />
             <Route path="payment-methods" element={<PaymentMethodSettings />} />
@@ -119,7 +168,11 @@ function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </Router>
+      </Suspense>
+      </Router>
+      </ConfirmProvider>
+    </BrandingProvider>
+  </AuthProvider>
   );
 }
 

@@ -45,7 +45,9 @@ export const SYSTEM_TOKENS: SystemToken[] = [
   { key: 'time_arrive', label: 'Arrive at Venue', category: 'Timeline', description: "Arrival at venue" },
   { key: 'time_setup', label: 'Setup Time', category: 'Timeline', description: "Setup start time" },
   { key: 'time_start', label: 'Event Start Time', category: 'Timeline', description: "Guest arrival / Start" },
+  { key: 'event_start_time', label: 'Event Start Time (Alias)', category: 'Timeline', description: "Alias for time_start" },
   { key: 'time_end', label: 'Event End Time', category: 'Timeline', description: "Event conclusion" },
+  { key: 'event_end_time', label: 'Event End Time (Alias)', category: 'Timeline', description: "Alias for time_end" },
 
   // Counts & Dietary
   { key: 'guest_count', label: 'Guest Count', category: 'Event', description: "Total expected guests" },

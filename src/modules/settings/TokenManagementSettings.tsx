@@ -196,7 +196,7 @@ export default function TokenManagementSettings() {
       event_venue: 'Grand Hotel',
       invoice_total: currencyFormat === 'USD' ? ',000.00' : 'MXN ,000.00',
       balance_due: currencyFormat === 'USD' ? ',500.00' : 'MXN ,500.00',
-      company_name: 'OMD Events',
+      company_name: 'Oh My Desserts MX',
       current_date: new Date().toLocaleDateString(),
     };
 
@@ -224,17 +224,17 @@ export default function TokenManagementSettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Token Management</h2>
-            <p className="text-sm text-gray-500">Manage merge tags and shortcodes for your templates.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Token Management</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Manage merge tags and shortcodes for your templates.</p>
           </div>
         </div>
         {activeTab === 'custom' && (
           <button
             onClick={handleAddCustom}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700"
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90"
           >
             <Plus className="h-4 w-4 mr-2" />
             Create Token
@@ -243,14 +243,14 @@ export default function TokenManagementSettings() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('library')}
             className={`${
               activeTab === 'library'
-                ? 'border-pink-500 text-pink-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Database className="h-4 w-4 mr-2" />
@@ -260,8 +260,8 @@ export default function TokenManagementSettings() {
             onClick={() => setActiveTab('custom')}
             className={`${
               activeTab === 'custom'
-                ? 'border-pink-500 text-pink-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Tag className="h-4 w-4 mr-2" />
@@ -271,8 +271,8 @@ export default function TokenManagementSettings() {
             onClick={() => setActiveTab('settings')}
             className={`${
               activeTab === 'settings'
-                ? 'border-pink-500 text-pink-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Settings className="h-4 w-4 mr-2" />
@@ -282,8 +282,8 @@ export default function TokenManagementSettings() {
             onClick={() => setActiveTab('tester')}
             className={`${
               activeTab === 'tester'
-                ? 'border-pink-500 text-pink-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Play className="h-4 w-4 mr-2" />
@@ -293,7 +293,7 @@ export default function TokenManagementSettings() {
       </div>
 
       {/* Content */}
-      <div className="bg-white shadow sm:rounded-lg min-h-[400px]">
+      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg min-h-[400px]">
         
         {/* Library Tab */}
         {activeTab === 'library' && (
@@ -305,7 +305,7 @@ export default function TokenManagementSettings() {
                 </div>
                 <input
                   type="text"
-                  className="focus:ring-pink-500 focus:border-pink-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+                  className="focus:ring-primary focus:border-primary block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
                   placeholder="Search system tokens..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -314,22 +314,22 @@ export default function TokenManagementSettings() {
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Token</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usage</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Token</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Description</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Category</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Usage</th>
                     <th className="relative px-6 py-3"><span className="sr-only">Copy</span></th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 dark:bg-gray-800 divide-y divide-gray-200">
                   {allTokens.filter(t => t.type === 'system').map((token) => (
-                    <tr key={token.key} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-pink-600 font-medium">
+                    <tr key={token.key} className="hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary font-medium">
                         {startWrap}{token.key}{endWrap}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
                         {token.description}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -337,7 +337,7 @@ export default function TokenManagementSettings() {
                           {token.category}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
                         {token.usageCount} templates
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -361,10 +361,10 @@ export default function TokenManagementSettings() {
             ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {customTokens.map((token) => (
-                <div key={token.id || token.key} className="relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm flex items-center space-x-3 hover:border-pink-400 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-pink-500">
+                <div key={token.id || token.key} className="relative rounded-lg border border-gray-300 bg-white dark:bg-gray-800 dark:bg-gray-800 px-6 py-5 shadow-sm flex items-center space-x-3 hover:border-primary focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary">
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
-                      <p className="text-sm font-medium text-pink-600 font-mono truncate">
+                      <p className="text-sm font-medium text-primary font-mono truncate">
                         {startWrap}{token.key}{endWrap}
                       </p>
                       <div className="flex space-x-2">
@@ -376,8 +376,8 @@ export default function TokenManagementSettings() {
                         </button>
                       </div>
                     </div>
-                    <p className="text-sm text-gray-900 mt-1 truncate">{token.value}</p>
-                    <p className="text-xs text-gray-500 mt-1">{token.description}</p>
+                    <p className="text-sm text-gray-900 dark:text-white dark:text-white mt-1 truncate">{token.value}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1">{token.description}</p>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                         {token.category}
@@ -389,10 +389,10 @@ export default function TokenManagementSettings() {
               ))}
               <button
                 onClick={handleAddCustom}
-                className="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-12 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                className="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-12 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
               >
                 <Plus className="mx-auto h-12 w-12 text-gray-400" />
-                <span className="mt-2 block text-sm font-medium text-gray-900">Create new token</span>
+                <span className="mt-2 block text-sm font-medium text-gray-900 dark:text-white dark:text-white">Create new token</span>
               </button>
             </div>
             )}
@@ -403,42 +403,42 @@ export default function TokenManagementSettings() {
         {activeTab === 'settings' && (
           <div className="p-6 max-w-2xl space-y-8">
             <div>
-              <h3 className="text-lg font-medium text-gray-900">Syntax Configuration</h3>
-              <p className="text-sm text-gray-500 mb-4">Choose how tokens are wrapped in your templates.</p>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Syntax Configuration</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-4">Choose how tokens are wrapped in your templates.</p>
               <div className="grid grid-cols-3 gap-4">
                 <button
                   onClick={() => setSyntax('mustache')}
-                  className={`p-4 border rounded-lg text-center ${syntax === 'mustache' ? 'border-pink-500 bg-pink-50 ring-1 ring-pink-500' : 'border-gray-300 hover:bg-gray-50'}`}
+                  className={`p-4 border rounded-lg text-center ${syntax === 'mustache' ? 'border-primary bg-secondary ring-1 ring-primary' : 'border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700'}`}
                 >
-                  <span className="block text-lg font-mono font-bold text-gray-900">{'{{token}}'}</span>
-                  <span className="block text-xs text-gray-500 mt-1">Mustache (Default)</span>
+                  <span className="block text-lg font-mono font-bold text-gray-900 dark:text-white dark:text-white">{'{{token}}'}</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1">Mustache (Default)</span>
                 </button>
                 <button
                   onClick={() => setSyntax('percent')}
-                  className={`p-4 border rounded-lg text-center ${syntax === 'percent' ? 'border-pink-500 bg-pink-50 ring-1 ring-pink-500' : 'border-gray-300 hover:bg-gray-50'}`}
+                  className={`p-4 border rounded-lg text-center ${syntax === 'percent' ? 'border-primary bg-secondary ring-1 ring-primary' : 'border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700'}`}
                 >
-                  <span className="block text-lg font-mono font-bold text-gray-900">%token%</span>
-                  <span className="block text-xs text-gray-500 mt-1">Percent</span>
+                  <span className="block text-lg font-mono font-bold text-gray-900 dark:text-white dark:text-white">%token%</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1">Percent</span>
                 </button>
                 <button
                   onClick={() => setSyntax('brackets')}
-                  className={`p-4 border rounded-lg text-center ${syntax === 'brackets' ? 'border-pink-500 bg-pink-50 ring-1 ring-pink-500' : 'border-gray-300 hover:bg-gray-50'}`}
+                  className={`p-4 border rounded-lg text-center ${syntax === 'brackets' ? 'border-primary bg-secondary ring-1 ring-primary' : 'border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700'}`}
                 >
-                  <span className="block text-lg font-mono font-bold text-gray-900">[token]</span>
-                  <span className="block text-xs text-gray-500 mt-1">Brackets</span>
+                  <span className="block text-lg font-mono font-bold text-gray-900 dark:text-white dark:text-white">[token]</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1">Brackets</span>
                 </button>
               </div>
             </div>
 
-            <div className="border-t border-gray-200 pt-8">
-              <h3 className="text-lg font-medium text-gray-900">Data Formatting</h3>
+            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-8">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Data Formatting</h3>
               <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
                 <div className="sm:col-span-3">
                   <label className="block text-sm font-medium text-gray-700">Date Format</label>
                   <select
                     value={dateFormat}
                     onChange={(e) => setDateFormat(e.target.value)}
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-pink-500 focus:border-pink-500 sm:text-sm rounded-md"
+                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
                   >
                     <option value="MM/DD/YYYY">MM/DD/YYYY (12/25/2025)</option>
                     <option value="DD/MM/YYYY">DD/MM/YYYY (25/12/2025)</option>
@@ -452,7 +452,7 @@ export default function TokenManagementSettings() {
                   <select
                     value={currencyFormat}
                     onChange={(e) => setCurrencyFormat(e.target.value)}
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-pink-500 focus:border-pink-500 sm:text-sm rounded-md"
+                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
                   >
                     <option value="USD">,234.56 (USD)</option>
                     <option value="MXN">MXN ,234.56</option>
@@ -462,16 +462,16 @@ export default function TokenManagementSettings() {
               </div>
             </div>
 
-            <div className="border-t border-gray-200 pt-8">
-              <h3 className="text-lg font-medium text-gray-900">Global Fallback</h3>
-              <p className="text-sm text-gray-500 mb-4">What to display if a token's data source is empty.</p>
+            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-8">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Global Fallback</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-4">What to display if a token's data source is empty.</p>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Default Replacement Text</label>
                 <input
                   type="text"
                   value={globalFallback}
                   onChange={(e) => setGlobalFallback(e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                   placeholder="e.g. N/A or Valued Customer"
                 />
               </div>
@@ -488,13 +488,13 @@ export default function TokenManagementSettings() {
                 rows={10}
                 value={testInput}
                 onChange={(e) => setTestInput(e.target.value)}
-                className="shadow-sm focus:ring-pink-500 focus:border-pink-500 block w-full sm:text-sm border-gray-300 rounded-md font-mono"
+                className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md font-mono"
                 placeholder="Type your text here using tokens..."
               />
               <div className="mt-4">
                 <button
                   onClick={runTest}
-                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700"
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90"
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Render Preview
@@ -503,7 +503,7 @@ export default function TokenManagementSettings() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Live Preview</label>
-              <div className="bg-gray-50 border border-gray-200 rounded-md p-4 h-[250px] overflow-y-auto whitespace-pre-wrap">
+              <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 border border-gray-200 dark:border-gray-700 dark:border-gray-700 rounded-md p-4 h-[250px] overflow-y-auto whitespace-pre-wrap">
                 {testOutput || <span className="text-gray-400 italic">Click 'Render Preview' to see the result...</span>}
               </div>
               <div className="mt-4 bg-blue-50 p-4 rounded-md">
@@ -522,16 +522,16 @@ export default function TokenManagementSettings() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
+        <div className="fixed inset-0 bg-gray-50 dark:bg-gray-700 dark:bg-gray-7000 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4">
               {editingToken ? 'Edit Custom Token' : 'Create Custom Token'}
             </h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Token Key</label>
                 <div className="mt-1 flex rounded-md shadow-sm">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm">
+                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">
                     {startWrap}
                   </span>
                   <input
@@ -539,7 +539,7 @@ export default function TokenManagementSettings() {
                     value={modalKey}
                     onChange={(e) => setModalKey(e.target.value)}
                     disabled={!!editingToken}
-                    className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md focus:ring-pink-500 focus:border-pink-500 sm:text-sm border-gray-300 disabled:bg-gray-100"
+                    className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md focus:ring-primary focus:border-primary sm:text-sm border-gray-300 disabled:bg-gray-100"
                     placeholder="my_token_name"
                   />
                 </div>
@@ -550,7 +550,7 @@ export default function TokenManagementSettings() {
                   rows={3}
                   value={modalValue}
                   onChange={(e) => setModalValue(e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                   placeholder="The text that will appear..."
                 />
               </div>
@@ -560,7 +560,7 @@ export default function TokenManagementSettings() {
                   type="text"
                   value={modalDesc}
                   onChange={(e) => setModalDesc(e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                 />
               </div>
               <div>
@@ -568,7 +568,7 @@ export default function TokenManagementSettings() {
                 <select
                   value={modalCategory}
                   onChange={(e) => setModalCategory(e.target.value)}
-                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-pink-500 focus:border-pink-500 sm:text-sm rounded-md"
+                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
                 >
                   <option value="General">General</option>
                   <option value="Social">Social Media</option>
@@ -580,13 +580,13 @@ export default function TokenManagementSettings() {
             <div className="mt-6 flex justify-end space-x-3">
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveCustom}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700"
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90"
               >
                 Save Token
               </button>

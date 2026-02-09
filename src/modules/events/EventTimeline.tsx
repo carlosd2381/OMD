@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Package, 
   Car, 
@@ -11,10 +11,12 @@ import {
   Save
 } from 'lucide-react';
 import type { Event } from '../../types/event';
+import type { Venue } from '../../types/venue';
 import toast from 'react-hot-toast';
 
 interface EventTimelineProps {
   event: Event;
+  venue: Venue | null;
 }
 
 interface TimelineItem {
@@ -69,12 +71,70 @@ const DEFAULT_ITEMS: TimelineItem[] = [
     description: 'Event concludes (+120 min)',
     offsetMinutes: 120,
     icon: 'flag'
+  },
+  {
+    id: '7',
+    title: 'Clean Up',
+    description: 'Post-event cleanup (+25 min)',
+    offsetMinutes: 145,
+    icon: 'wrench'
+  },
+  {
+    id: '8',
+    title: 'Arrive back @ HQ',
+    description: 'Return to HQ (+60 min travel)',
+    offsetMinutes: 180,
+    icon: 'car'
   }
 ];
 
-export default function EventTimeline({ event }: EventTimelineProps) {
-  const [items] = useState<TimelineItem[]>(DEFAULT_ITEMS);
+export default function EventTimeline({ event, venue }: EventTimelineProps) {
+  const [items, setItems] = useState<TimelineItem[]>(DEFAULT_ITEMS);
   const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    if (venue && venue.travel_time_mins) {
+      const travelTime = Math.ceil(venue.travel_time_mins);
+      const bufferTime = 30;
+      const totalTravelTime = travelTime + bufferTime;
+
+      // Base offsets (assuming standard setup/arrival buffers)
+      // Setup starts at -40
+      // Arrive at -65 (25 mins before setup)
+      const arriveOffset = -65;
+      const leaveOffset = arriveOffset - totalTravelTime;
+      const meetOffset = leaveOffset - 15;
+
+      setItems(prevItems => {
+        const eventEnd = prevItems.find(item => item.title === 'Event End');
+        const eventEndOffset = eventEnd?.offsetMinutes ?? 120;
+
+        return prevItems.map(item => {
+          if (item.title === 'Leave to Event') {
+            return {
+              ...item,
+              description: `Depart for venue (${totalTravelTime} min travel: ${travelTime} + ${bufferTime} min buffer)`,
+              offsetMinutes: leaveOffset
+            };
+          }
+          if (item.title === 'Meet & Load') {
+            return {
+              ...item,
+              offsetMinutes: meetOffset
+            };
+          }
+          if (item.title === 'Arrive back @ HQ') {
+            return {
+              ...item,
+              description: `Return to HQ (${travelTime} min travel)`,
+              offsetMinutes: eventEndOffset + travelTime
+            };
+          }
+          return item;
+        });
+      });
+    }
+  }, [venue]);
 
   // Helper to calculate time based on event start time and offset
   const calculateTime = (_baseTimeStr: string, offsetMinutes: number) => {
@@ -101,10 +161,10 @@ export default function EventTimeline({ event }: EventTimelineProps) {
       case 'package': return <Package className="h-5 w-5 text-amber-600" />;
       case 'car': return <Car className="h-5 w-5 text-red-500" />;
       case 'pin': return <MapPin className="h-5 w-5 text-red-600" />;
-      case 'wrench': return <Wrench className="h-5 w-5 text-gray-500" />;
+      case 'wrench': return <Wrench className="h-5 w-5 text-gray-500 dark:text-gray-400 dark:text-gray-400" />;
       case 'party': return <PartyPopper className="h-5 w-5 text-white" />;
       case 'flag': return <Flag className="h-5 w-5 text-gray-600" />;
-      default: return <Package className="h-5 w-5 text-gray-500" />;
+      default: return <Package className="h-5 w-5 text-gray-500 dark:text-gray-400 dark:text-gray-400" />;
     }
   };
 
@@ -139,9 +199,9 @@ export default function EventTimeline({ event }: EventTimelineProps) {
   };
 
   return (
-    <div className="bg-white shadow sm:rounded-lg">
-      <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200">
-        <h3 className="text-lg leading-6 font-medium text-gray-900">Event Timeline</h3>
+    <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg">
+      <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+        <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Event Timeline</h3>
         <div className="flex space-x-3">
           <button
             onClick={handleAutoCalculate}
@@ -152,7 +212,7 @@ export default function EventTimeline({ event }: EventTimelineProps) {
           </button>
           <button
             onClick={() => setIsEditing(!isEditing)}
-            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
+            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none"
           >
             <Edit className="h-4 w-4 mr-2" />
             {isEditing ? 'Cancel Edit' : 'Edit Timeline'}
@@ -185,16 +245,16 @@ export default function EventTimeline({ event }: EventTimelineProps) {
                     <div className="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
                       <div>
                         <div className="flex items-center space-x-2">
-                            <p className={`text-sm font-medium ${item.isAnchor ? 'text-sky-600' : 'text-gray-900'}`}>
+                            <p className={`text-sm font-medium ${item.isAnchor ? 'text-sky-600' : 'text-gray-900 dark:text-white dark:text-white'}`}>
                                 {item.title}
                             </p>
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getBadgeColor(item.offsetMinutes, item.isAnchor)}`}>
                                 {formatOffset(item.offsetMinutes)}
                             </span>
                         </div>
-                        <p className="text-sm text-gray-500 mt-1">{item.description}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1">{item.description}</p>
                       </div>
-                      <div className="text-right whitespace-nowrap text-sm text-gray-500 font-mono bg-gray-50 px-2 py-1 rounded border border-gray-200 self-start">
+                      <div className="text-right whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 dark:border-gray-700 self-start">
                         {calculateTime(event.date, item.offsetMinutes)}
                       </div>
                     </div>

@@ -38,6 +38,7 @@ export const leadService = {
         event_type: lead.event_type,
         event_date: lead.event_date,
         guest_count: lead.guest_count,
+        budget: lead.budget,
         venue_name: lead.venue_name,
         services_interested: lead.services_interested,
         notes: lead.notes,

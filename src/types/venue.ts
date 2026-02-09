@@ -24,6 +24,14 @@ export interface Venue {
   zip_code?: string;
   country?: string;
   notes?: string;
+  google_place_id?: string;
+  latitude?: number;
+  longitude?: number;
+  travel_distance_km?: number;
+  travel_time_mins?: number;
+  flete_fee?: number;
+  map_url?: string;
+  is_preferred?: boolean;
   created_at: string;
   updated_at: string;
 }

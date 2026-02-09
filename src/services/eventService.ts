@@ -1,11 +1,36 @@
 import { supabase } from '../lib/supabase';
+import { activityLogService } from './activityLogService';
 import type { Event } from '../types/event';
 
 export const eventService = {
   async getEvents(): Promise<Event[]> {
     const { data, error } = await supabase
       .from('events')
+      .select('*, venues(name)')
+      .order('date', { ascending: true });
+
+    if (error) throw error;
+
+    return (data || []).map(mapToEvent);
+  },
+
+  async getEventsByVenue(venueId: string): Promise<Event[]> {
+    const { data, error } = await supabase
+      .from('events')
       .select('*')
+      .eq('venue_id', venueId)
+      .order('date', { ascending: true });
+
+    if (error) throw error;
+
+    return (data || []).map(mapToEvent);
+  },
+
+  async getEventsByPlanner(plannerId: string): Promise<Event[]> {
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .eq('planner_id', plannerId)
       .order('date', { ascending: true });
 
     if (error) throw error;
@@ -48,6 +73,13 @@ export const eventService = {
 
     if (error) throw error;
 
+    await activityLogService.logActivity({
+      entity_id: event.client_id,
+      entity_type: 'client',
+      action: 'Event Created',
+      details: `Event "${data.name}" created`,
+    });
+
     return mapToEvent(data);
   },
 
@@ -64,16 +96,39 @@ export const eventService = {
 
     if (error) throw error;
 
+    await activityLogService.logActivity({
+      entity_id: id,
+      entity_type: 'event',
+      action: 'Event Updated',
+      details: 'Event details updated',
+    });
+
     return mapToEvent(data);
   },
 
   async deleteEvent(id: string): Promise<void> {
+    // Fetch event first to get client_id for logging
+    const { data: eventData } = await supabase
+      .from('events')
+      .select('client_id, name')
+      .eq('id', id)
+      .single();
+
     const { error } = await supabase
       .from('events')
       .delete()
       .eq('id', id);
 
     if (error) throw error;
+
+    if (eventData) {
+      await activityLogService.logActivity({
+        entity_id: eventData.client_id,
+        entity_type: 'client',
+        action: 'Event Deleted',
+        details: `Event "${eventData.name}" deleted`,
+      });
+    }
   }
 };
 
@@ -87,6 +142,7 @@ function mapToEvent(data: any): Event {
     guest_count: data.guest_count || undefined,
     budget: data.budget || undefined,
     notes: data.notes || undefined,
-    updated_at: data.created_at // Fallback
+    updated_at: data.created_at, // Fallback
+    venue_name: data.venues?.name || data.venue_name // Use joined venue name if available, otherwise fallback to manual name
   };
 }

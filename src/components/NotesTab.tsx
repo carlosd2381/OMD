@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Trash2, Clock, User, MessageSquare, AlertCircle } from 'lucide-react';
 import { noteService } from '../services/noteService';
 import { activityLogService } from '../services/activityLogService';
+import { useConfirm } from '../contexts/ConfirmContext';
 import type { Note } from '../types/note';
 import type { ActivityLog } from '../types/activity';
 import toast from 'react-hot-toast';
@@ -12,6 +13,7 @@ interface NotesTabProps {
 }
 
 export default function NotesTab({ entityId, entityType }: NotesTabProps) {
+  const { confirm } = useConfirm();
   const [notes, setNotes] = useState<Note[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +68,14 @@ export default function NotesTab({ entityId, entityType }: NotesTabProps) {
   };
 
   const handleDeleteNote = async (noteId: string) => {
-    if (!confirm('Are you sure you want to delete this note?')) return;
+    const confirmed = await confirm({
+      title: 'Delete Note',
+      message: 'Are you sure you want to delete this note?',
+      confirmLabel: 'Delete',
+      type: 'danger'
+    });
+
+    if (!confirmed) return;
 
     try {
       await noteService.deleteNote(noteId);
@@ -78,7 +87,7 @@ export default function NotesTab({ entityId, entityType }: NotesTabProps) {
   };
 
   if (loading) {
-    return <div className="py-4 text-center text-gray-500">Loading notes and activity...</div>;
+    return <div className="py-4 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">Loading notes and activity...</div>;
   }
 
   return (
@@ -86,13 +95,13 @@ export default function NotesTab({ entityId, entityType }: NotesTabProps) {
       {/* Internal Notes Section */}
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium text-gray-900 flex items-center">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white flex items-center">
             <MessageSquare className="h-5 w-5 mr-2 text-gray-400" />
             Internal Notes
           </h3>
           <button
             onClick={() => setIsAddingNote(!isAddingNote)}
-            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
           >
             <Plus className="h-4 w-4 mr-1" />
             Add Note
@@ -100,7 +109,7 @@ export default function NotesTab({ entityId, entityType }: NotesTabProps) {
         </div>
 
         {isAddingNote && (
-          <form onSubmit={handleAddNote} className="bg-gray-50 p-4 rounded-md border border-gray-200">
+          <form onSubmit={handleAddNote} className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-md border border-gray-200 dark:border-gray-700 dark:border-gray-700">
             <label htmlFor="note" className="block text-sm font-medium text-gray-700">
               New Note
             </label>
@@ -108,7 +117,7 @@ export default function NotesTab({ entityId, entityType }: NotesTabProps) {
               <textarea
                 id="note"
                 rows={3}
-                className="shadow-sm focus:ring-pink-500 focus:border-pink-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md"
                 placeholder="Enter internal note..."
                 value={newNote}
                 onChange={(e) => setNewNote(e.target.value)}
@@ -118,13 +127,13 @@ export default function NotesTab({ entityId, entityType }: NotesTabProps) {
               <button
                 type="button"
                 onClick={() => setIsAddingNote(false)}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
               >
                 Save Note
               </button>
@@ -134,12 +143,12 @@ export default function NotesTab({ entityId, entityType }: NotesTabProps) {
 
         <div className="space-y-4">
           {notes.length === 0 ? (
-            <p className="text-sm text-gray-500 italic">No internal notes yet.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 italic">No internal notes yet.</p>
           ) : (
             notes.map((note) => (
-              <div key={note.id} className="bg-white shadow sm:rounded-lg p-4 border border-gray-200 relative group">
+              <div key={note.id} className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-4 border border-gray-200 dark:border-gray-700 dark:border-gray-700 relative group">
                 <div className="flex justify-between items-start">
-                  <div className="flex items-center space-x-2 text-xs text-gray-500 mb-2">
+                  <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-2">
                     <User className="h-3 w-3" />
                     <span>{note.created_by}</span>
                     <span>•</span>
@@ -148,10 +157,11 @@ export default function NotesTab({ entityId, entityType }: NotesTabProps) {
                   </div>
                   <button
                     onClick={() => handleDeleteNote(note.id)}
-                    className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-white dark:bg-gray-800 dark:bg-gray-800 border border-gray-300 rounded hover:bg-red-50"
                     title="Delete Note"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    Delete
                   </button>
                 </div>
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">{note.content}</p>
@@ -163,7 +173,7 @@ export default function NotesTab({ entityId, entityType }: NotesTabProps) {
 
       {/* Activity Log Section */}
       <div className="space-y-6">
-        <h3 className="text-lg font-medium text-gray-900 flex items-center">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white flex items-center">
           <Clock className="h-5 w-5 mr-2 text-gray-400" />
           Activity Log
         </h3>
@@ -171,7 +181,7 @@ export default function NotesTab({ entityId, entityType }: NotesTabProps) {
         <div className="flow-root">
           <ul className="-mb-8">
             {logs.length === 0 ? (
-              <li className="text-sm text-gray-500 italic">No activity recorded yet.</li>
+              <li className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 italic">No activity recorded yet.</li>
             ) : (
               logs.map((log, logIdx) => (
                 <li key={log.id}>
@@ -182,19 +192,19 @@ export default function NotesTab({ entityId, entityType }: NotesTabProps) {
                     <div className="relative flex space-x-3">
                       <div>
                         <span className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center ring-8 ring-white">
-                          <AlertCircle className="h-5 w-5 text-gray-500" aria-hidden="true" />
+                          <AlertCircle className="h-5 w-5 text-gray-500 dark:text-gray-400 dark:text-gray-400" aria-hidden="true" />
                         </span>
                       </div>
                       <div className="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
                         <div>
-                          <p className="text-sm text-gray-900">
-                            {log.action} <span className="font-medium text-gray-500">by {log.created_by}</span>
+                          <p className="text-sm text-gray-900 dark:text-white dark:text-white">
+                            {log.action} <span className="font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">by {log.created_by}</span>
                           </p>
                           {log.details && (
-                            <p className="text-sm text-gray-500 mt-0.5">{log.details}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-0.5">{log.details}</p>
                           )}
                         </div>
-                        <div className="text-right text-sm whitespace-nowrap text-gray-500">
+                        <div className="text-right text-sm whitespace-nowrap text-gray-500 dark:text-gray-400 dark:text-gray-400">
                           <time dateTime={log.created_at}>{new Date(log.created_at).toLocaleDateString()}</time>
                           <div className="text-xs">{new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                         </div>

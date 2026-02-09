@@ -43,6 +43,18 @@ A comprehensive business management application for dessert catering businesses,
    npm run dev
    ```
 
+  ### Environment Variables
+
+  Create a `.env` file in the project root before running the app:
+
+  ```bash
+  VITE_SUPABASE_URL=your_supabase_url
+  VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+  VITE_NOTIFICATIONS_API_URL=http://localhost:3001
+  # Optional – shown in outbound emails when present
+  VITE_CLIENT_PORTAL_URL=https://portal.yourdomain.com
+  ```
+
 ## Project Structure
 
 - `src/` - Frontend source code

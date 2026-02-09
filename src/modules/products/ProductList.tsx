@@ -39,6 +39,10 @@ export default function ProductList() {
     setIsFormOpen(true);
   };
 
+  const handleRowClick = (product: Product) => {
+    handleEdit(product);
+  };
+
   const handleDelete = async (id: string) => {
     if (deleteConfirm === id) {
       try {
@@ -118,11 +122,11 @@ export default function ProductList() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Products & Services</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Products & Services</h1>
                 <div className="flex gap-2">
           <button
             onClick={handleSeedProducts}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
             title="Import Default Products"
           >
             <Database className="h-5 w-5 mr-2" />
@@ -130,7 +134,7 @@ export default function ProductList() {
           </button>
           <button
             onClick={handleAdd}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
           >
             <Plus className="h-5 w-5 mr-2" />
             Add Product
@@ -138,37 +142,40 @@ export default function ProductList() {
         </div>
       </div>
 
-      <div className="flex items-center px-4 py-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+      <div className="flex items-center px-4 py-3 bg-white dark:bg-gray-800 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 dark:border-gray-700 rounded-lg shadow-sm">
         <Search className="h-5 w-5 text-gray-400 mr-3" />
         <input
           type="text"
           placeholder="Search products..."
-          className="flex-1 border-none focus:ring-0 text-gray-900 placeholder-gray-500"
+          className="flex-1 border-none focus:ring-0 text-gray-900 dark:text-white dark:text-white placeholder-gray-500"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </div>
 
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
+          Click any product row to quick-edit pricing and details.
+        </div>
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
                 Product
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
                 Category
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
                 Cost
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
                 Direct Price
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
                 PV Price
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
                 Status
               </th>
               <th scope="col" className="relative px-6 py-3">
@@ -176,32 +183,47 @@ export default function ProductList() {
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-gray-800 dark:bg-gray-800 divide-y divide-gray-200">
             {filteredProducts.map((product) => (
-              <tr key={product.id} className={!product.is_active ? 'bg-gray-50' : ''}>
+              <tr
+                key={product.id}
+                onClick={() => handleRowClick(product)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleRowClick(product);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                className={`${!product.is_active ? 'bg-gray-50 dark:bg-gray-700 dark:bg-gray-700' : ''} hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition`}
+              >
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{product.name}</div>
-                      <div className="text-sm text-gray-500 truncate max-w-xs">{product.description}</div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-white dark:text-white">{product.name}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 truncate max-w-xs">{product.description}</div>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">{product.category}</div>
+                  <div className="text-sm text-gray-900 dark:text-white dark:text-white">{product.category}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-500">{formatCurrency(product.cost)}</div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{formatCurrency(product.cost)}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900 font-medium">{formatCurrency(product.price_direct)}</div>
+                  <div className="text-sm text-gray-900 dark:text-white dark:text-white font-medium">{formatCurrency(product.price_direct)}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900 font-medium">{formatCurrency(product.price_pv)}</div>
+                  <div className="text-sm text-gray-900 dark:text-white dark:text-white font-medium">{formatCurrency(product.price_pv)}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <button 
-                    onClick={() => handleToggleActive(product)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleToggleActive(product);
+                    }}
                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       product.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                     }`}
@@ -210,20 +232,34 @@ export default function ProductList() {
                   </button>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <div className="flex justify-end space-x-3">
+                  <div className="flex justify-end space-x-2">
                     <button
-                      onClick={() => handleEdit(product)}
-                      className="text-indigo-600 hover:text-indigo-900"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleEdit(product);
+                      }}
+                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                     >
-                      <Edit className="h-5 w-5" />
+                      <Edit className="h-4 w-4 mr-1" /> Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(product.id)}
-                      className={`${
-                        deleteConfirm === product.id ? 'text-red-700 bg-red-100 rounded px-2' : 'text-red-600 hover:text-red-900'
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleDelete(product.id);
+                      }}
+                      className={`inline-flex items-center px-2.5 py-1.5 border shadow-sm text-xs font-medium rounded focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                        deleteConfirm === product.id 
+                          ? 'border-transparent text-white bg-red-600 hover:bg-red-700 focus:ring-red-500' 
+                          : 'border-gray-300 text-red-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-red-50 focus:ring-red-500'
                       }`}
                     >
-                      {deleteConfirm === product.id ? 'Confirm?' : <Trash2 className="h-5 w-5" />}
+                      {deleteConfirm === product.id ? (
+                        'Confirm?'
+                      ) : (
+                        <>
+                          <Trash2 className="h-4 w-4 mr-1" /> Delete
+                        </>
+                      )}
                     </button>
                   </div>
                 </td>

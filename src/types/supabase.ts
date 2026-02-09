@@ -39,6 +39,211 @@ export type Database = {
   }
   public: {
     Tables: {
+      event_staff_assignments: {
+        Row: {
+          id: string
+          event_id: string
+          staff_id: string
+          role: string
+          pay_rate: number
+          pay_type: 'hourly' | 'flat'
+          total_pay: number | null
+          status: 'pending' | 'confirmed' | 'declined' | 'completed'
+          is_paid: boolean
+          paid_at: string | null
+          payroll_run_id: string | null
+          payment_reference: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          staff_id: string
+          role: string
+          pay_rate: number
+          pay_type: 'hourly' | 'flat'
+          total_pay?: number | null
+          status?: 'pending' | 'confirmed' | 'declined' | 'completed'
+          is_paid?: boolean
+          paid_at?: string | null
+          payroll_run_id?: string | null
+          payment_reference?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          staff_id?: string
+          role?: string
+          pay_rate?: number
+          pay_type?: 'hourly' | 'flat'
+          total_pay?: number | null
+          status?: 'pending' | 'confirmed' | 'declined' | 'completed'
+          is_paid?: boolean
+          paid_at?: string | null
+          payroll_run_id?: string | null
+          payment_reference?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_staff_assignments_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_staff_assignments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "event_staff_assignments_staff_id_fkey_users"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_staff_assignments_payroll_run_id_fkey"
+            columns: ["payroll_run_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_runs"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      payroll_runs: {
+        Row: {
+          id: string
+          period_start: string
+          period_end: string
+          payment_date: string
+          total_amount: number
+          status: 'draft' | 'processed' | 'paid'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          period_start: string
+          period_end: string
+          payment_date: string
+          total_amount: number
+          status?: 'draft' | 'processed' | 'paid'
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          period_start?: string
+          period_end?: string
+          payment_date?: string
+          total_amount?: number
+          status?: 'draft' | 'processed' | 'paid'
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      staff_profiles: {
+        Row: {
+          user_id: string
+          first_name: string | null
+          last_name: string | null
+          phone: string | null
+          address: string | null
+          date_of_birth: string | null
+          id_type: string | null
+          id_number: string | null
+          id_expiration_date: string | null
+          id_front_url: string | null
+          id_back_url: string | null
+          is_driver: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          first_name?: string | null
+          last_name?: string | null
+          phone?: string | null
+          address?: string | null
+          date_of_birth?: string | null
+          id_type?: string | null
+          id_number?: string | null
+          id_expiration_date?: string | null
+          id_front_url?: string | null
+          id_back_url?: string | null
+          is_driver?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          first_name?: string | null
+          last_name?: string | null
+          phone?: string | null
+          address?: string | null
+          date_of_birth?: string | null
+          id_type?: string | null
+          id_number?: string | null
+          id_expiration_date?: string | null
+          id_front_url?: string | null
+          id_back_url?: string | null
+          is_driver?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_profiles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+        staff_pay_rates: {
+          Row: {
+            id: string
+            position_key: string
+            position_label: string
+            rate_type: 'flat' | 'per_direction' | 'percent_revenue' | 'tiered_hours' | 'tiered_quantity'
+            config: Json
+            notes: string | null
+            created_at: string | null
+            updated_at: string | null
+          }
+          Insert: {
+            id?: string
+            position_key: string
+            position_label: string
+            rate_type: 'flat' | 'per_direction' | 'percent_revenue' | 'tiered_hours' | 'tiered_quantity'
+            config: Json
+            notes?: string | null
+            created_at?: string | null
+            updated_at?: string | null
+          }
+          Update: {
+            id?: string
+            position_key?: string
+            position_label?: string
+            rate_type?: 'flat' | 'per_direction' | 'percent_revenue' | 'tiered_hours' | 'tiered_quantity'
+            config?: Json
+            notes?: string | null
+            created_at?: string | null
+            updated_at?: string | null
+          }
+          Relationships: []
+        }
       activity_logs: {
         Row: {
           action: string
@@ -208,6 +413,7 @@ export type Database = {
       clients: {
         Row: {
           address: string | null
+          auth_user_id: string | null
           city: string | null
           company_name: string | null
           country: string | null
@@ -231,6 +437,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          auth_user_id?: string | null
           city?: string | null
           company_name?: string | null
           country?: string | null
@@ -254,6 +461,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          auth_user_id?: string | null
           city?: string | null
           company_name?: string | null
           country?: string | null
@@ -424,6 +632,7 @@ export type Database = {
           secondary_client_id: string | null
           created_at: string | null
           date: string
+          venue_name: string | null
           guest_count: number | null
           id: string
           name: string
@@ -438,6 +647,7 @@ export type Database = {
           secondary_client_id?: string | null
           created_at?: string | null
           date: string
+          venue_name?: string | null
           guest_count?: number | null
           id?: string
           name: string
@@ -452,6 +662,7 @@ export type Database = {
           secondary_client_id?: string | null
           created_at?: string | null
           date?: string
+          venue_name?: string | null
           guest_count?: number | null
           id?: string
           name?: string
@@ -1095,9 +1306,12 @@ export type Database = {
       }
       tasks: {
         Row: {
-          client_id: string
+          client_id: string | null
+          venue_id: string | null
+          planner_id: string | null
           completed_at: string | null
           completed_by: string | null
+          assigned_to: string | null
           created_at: string | null
           description: string | null
           due_date: string | null
@@ -1106,9 +1320,12 @@ export type Database = {
           title: string
         }
         Insert: {
-          client_id: string
+          client_id?: string | null
+          venue_id?: string | null
+          planner_id?: string | null
           completed_at?: string | null
           completed_by?: string | null
+          assigned_to?: string | null
           created_at?: string | null
           description?: string | null
           due_date?: string | null
@@ -1117,9 +1334,12 @@ export type Database = {
           title: string
         }
         Update: {
-          client_id?: string
+          client_id?: string | null
+          venue_id?: string | null
+          planner_id?: string | null
           completed_at?: string | null
           completed_by?: string | null
+          assigned_to?: string | null
           created_at?: string | null
           description?: string | null
           due_date?: string | null
@@ -1133,6 +1353,20 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_planner_id_fkey"
+            columns: ["planner_id"]
+            isOneToOne: false
+            referencedRelation: "planners"
             referencedColumns: ["id"]
           },
         ]
@@ -1240,32 +1474,35 @@ export type Database = {
       }
       users: {
         Row: {
+          auth_user_id: string | null
           created_at: string | null
           email: string
           id: string
           last_login: string | null
           name: string
-          role: Database["public"]["Enums"]["user_role"]
+          role: string[]
           security_config: Json | null
           status: Database["public"]["Enums"]["user_status"]
         }
         Insert: {
+          auth_user_id?: string | null
           created_at?: string | null
           email: string
           id?: string
           last_login?: string | null
           name: string
-          role: Database["public"]["Enums"]["user_role"]
+          role: string[]
           security_config?: Json | null
           status: Database["public"]["Enums"]["user_status"]
         }
         Update: {
+          auth_user_id?: string | null
           created_at?: string | null
           email?: string
           id?: string
           last_login?: string | null
           name?: string
-          role?: Database["public"]["Enums"]["user_role"]
+          role?: string[]
           security_config?: Json | null
           status?: Database["public"]["Enums"]["user_status"]
         }
@@ -1373,6 +1610,7 @@ export type Database = {
         Row: {
           actions: Json
           active: boolean
+          conditions: Json
           created_at: string | null
           id: string
           name: string
@@ -1381,6 +1619,7 @@ export type Database = {
         Insert: {
           actions: Json
           active: boolean
+          conditions?: Json
           created_at?: string | null
           id?: string
           name: string
@@ -1389,10 +1628,47 @@ export type Database = {
         Update: {
           actions?: Json
           active?: boolean
+          conditions?: Json
           created_at?: string | null
           id?: string
           name?: string
           trigger?: string
+        }
+        Relationships: []
+      }
+      social_integrations: {
+        Row: {
+          id: string
+          platform: 'facebook' | 'instagram'
+          page_id: string
+          page_name: string | null
+          access_token: string
+          webhook_secret: string | null
+          is_active: boolean
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          platform: 'facebook' | 'instagram'
+          page_id: string
+          page_name?: string | null
+          access_token: string
+          webhook_secret?: string | null
+          is_active?: boolean
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          platform?: 'facebook' | 'instagram'
+          page_id?: string
+          page_name?: string | null
+          access_token?: string
+          webhook_secret?: string | null
+          is_active?: boolean
+          created_at?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }

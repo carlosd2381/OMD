@@ -1,14 +1,14 @@
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/supabase';
 
-export type UserRole = Database['public']['Enums']['user_role'];
+export type UserRole = string;
 export type UserStatus = Database['public']['Enums']['user_status'];
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
+  role: UserRole[];
   status: UserStatus;
   lastLogin: string;
   securityConfig?: any;
@@ -33,7 +33,7 @@ function mapToUser(row: UserRow): User {
     id: row.id,
     name: row.name,
     email: row.email,
-    role: row.role,
+    role: Array.isArray(row.role) ? row.role : [row.role as unknown as string],
     status: row.status,
     lastLogin: row.last_login || '-',
     securityConfig: row.security_config,
@@ -64,13 +64,29 @@ export const userService = {
     return (data || []).map(mapToUser);
   },
 
-  inviteUser: async (email: string, role: UserRole): Promise<void> => {
+  createUser: async (user: { name: string; email: string; role: UserRole[]; status?: UserStatus }): Promise<User> => {
+    const { data, error } = await supabase
+      .from('users')
+      .insert({
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status || 'active',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return mapToUser(data);
+  },
+
+  inviteUser: async (email: string, role: UserRole[]): Promise<void> => {
     const { error } = await supabase
       .from('users')
       .insert({
         email,
         name: email.split('@')[0],
-        role,
+        role: role,
         status: 'pending',
       });
 
@@ -81,6 +97,15 @@ export const userService = {
     const { error } = await supabase
       .from('users')
       .update({ status })
+      .eq('id', id);
+
+    if (error) throw error;
+  },
+
+  updateUser: async (id: string, updates: { name?: string; role?: UserRole[]; status?: UserStatus }): Promise<void> => {
+    const { error } = await supabase
+      .from('users')
+      .update(updates as any)
       .eq('id', id);
 
     if (error) throw error;
@@ -114,6 +139,46 @@ export const userService = {
       // Actually, delete() without filter is allowed if RLS allows it.
       // But to be safe and explicit:
       
+    if (error) throw error;
+  },
+
+  recordLogin: async (userId: string): Promise<void> => {
+    const now = new Date().toISOString();
+    
+    // Update user last_login
+    await supabase
+      .from('users')
+      .update({ last_login: now })
+      .eq('id', userId);
+
+    // Create session
+    const userAgent = navigator.userAgent;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(userAgent);
+    const device = isMobile ? 'Mobile' : 'Desktop';
+    
+    // Simple IP placeholder - in a real app you'd use an external service or edge function
+    const ip = '127.0.0.1'; 
+
+    await supabase
+      .from('user_sessions')
+      .insert({
+        user_id: userId,
+        device: `${device} (${navigator.platform})`,
+        ip_address: ip,
+        location: 'Unknown',
+        last_active: now
+      });
+  },
+
+  linkAuthUser: async (authUserId: string, email?: string | null): Promise<void> => {
+    if (!email) return;
+
+    const { error } = await supabase
+      .from('users')
+      .update({ auth_user_id: authUserId })
+      .eq('email', email.toLowerCase())
+      .is('auth_user_id', null);
+
     if (error) throw error;
   }
 };

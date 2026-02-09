@@ -1,5 +1,6 @@
 import type { Client, CreateClientDTO, UpdateClientDTO } from '../types/client';
 import { supabase } from '../lib/supabase';
+import { activityLogService } from './activityLogService';
 
 export const clientService = {
   async getClients(): Promise<Client[]> {
@@ -23,6 +24,18 @@ export const clientService = {
     if (error) throw error;
     if (!data) return null;
 
+    return mapToClient(data);
+  },
+
+  async getClientByAuthUser(authUserId: string): Promise<Client | null> {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return null;
     return mapToClient(data);
   },
 
@@ -54,6 +67,13 @@ export const clientService = {
 
     if (error) throw error;
 
+    await activityLogService.logActivity({
+      entity_id: data.id,
+      entity_type: 'client',
+      action: 'Client Created',
+      details: `Client ${data.first_name} ${data.last_name} created`,
+    });
+
     return mapToClient(data);
   },
 
@@ -69,6 +89,13 @@ export const clientService = {
       .single();
 
     if (error) throw error;
+
+    await activityLogService.logActivity({
+      entity_id: id,
+      entity_type: 'client',
+      action: 'Client Updated',
+      details: 'Client details updated',
+    });
 
     return mapToClient(data);
   },
@@ -118,6 +145,7 @@ export const clientService = {
 function mapToClient(data: any): Client {
   return {
     ...data,
+    auth_user_id: data.auth_user_id ?? undefined,
     phone: data.phone || undefined,
     company_name: data.company_name || undefined,
     address: data.address || undefined,

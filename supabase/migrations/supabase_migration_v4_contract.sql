@@ -31,7 +31,7 @@ VALUES (
         <div style="width: 45%; text-align: right;">
             <p style="font-size: 10px; font-weight: bold; text-transform: uppercase; color: #999; margin-bottom: 10px;">Service Provider:</p>
             <p style="font-size: 16px; font-weight: bold; margin-bottom: 5px;">Oh My Desserts MX</p>
-            <p style="margin: 0;">Gran Santa Fe III</p>
+            <p style="margin: 0;">Priv. Palmilla, Jardines del Sur II</p>
             <p style="margin: 0;">Cancun, Mexico</p>
             <p style="margin-top: 10px; font-style: italic; color: #666;">Hereby known as ''OMD''.</p>
         </div>

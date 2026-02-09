@@ -5,6 +5,7 @@ import { eventService } from './eventService';
 import { clientService } from './clientService';
 import { venueService } from './venueService';
 import { tokenService } from './tokenService';
+import { invoiceService } from './invoiceService';
 import type { Quote } from '../types/quote';
 
 export const bookingService = {
@@ -75,6 +76,8 @@ async function generateInvoices(quote: Quote, forceRegenerate: boolean) {
   const event = await eventService.getEvent(quote.event_id);
   if (!event) return;
   const eventDate = new Date(event.date);
+  const safeRate = quote.exchange_rate && quote.exchange_rate > 0 ? quote.exchange_rate : 1;
+  const quoteTotalMXN = quote.currency === 'MXN' ? quote.total_amount : quote.total_amount * safeRate;
 
   // Calculate Invoices
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -83,11 +86,11 @@ async function generateInvoices(quote: Quote, forceRegenerate: boolean) {
     
     // Handle structure from PaymentScheduleSettings.tsx
     if (typeof milestone.percentage === 'number') {
-      amount = (quote.total_amount * milestone.percentage) / 100;
+      amount = (quoteTotalMXN * milestone.percentage) / 100;
     } 
     // Handle potential alternative structure (future proofing or legacy)
     else if (milestone.type === 'percentage' && milestone.value) {
-      amount = (quote.total_amount * milestone.value) / 100;
+      amount = (quoteTotalMXN * milestone.value) / 100;
     } else if (milestone.value) {
       amount = milestone.value;
     }
@@ -154,13 +157,15 @@ async function generateContract(quote: Quote, forceRegenerate: boolean) {
   if (event?.venue_id) {
     venue = await venueService.getVenue(event.venue_id);
   }
+  const invoices = await invoiceService.getInvoicesByQuote(quote.id);
 
   // Replace Tokens
   const processedContent = await tokenService.replaceTokens(template.content, {
     client: client || undefined,
     event: event || undefined,
     venue: venue || undefined,
-    quote: quote
+    quote: quote,
+    invoices
   });
 
   // Create Contract
@@ -170,7 +175,8 @@ async function generateContract(quote: Quote, forceRegenerate: boolean) {
     quote_id: quote.id,
     template_id: template.id,
     content: processedContent, // Use processed content
-    status: 'draft'
+    status: 'draft',
+    document_version: 1
   });
 
   if (error) throw error;

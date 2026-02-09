@@ -198,17 +198,17 @@ export default function PaymentScheduleSettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Payment Schedules</h2>
-            <p className="text-sm text-gray-500">Define standard payment terms for your events.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Payment Schedules</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Define standard payment terms for your events.</p>
           </div>
         </div>
         <button
           onClick={handleAddNew}
           disabled={editingId !== null}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 disabled:opacity-50"
+          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 disabled:opacity-50"
         >
           <Plus className="h-4 w-4 mr-2" />
           Add Schedule
@@ -217,15 +217,15 @@ export default function PaymentScheduleSettings() {
 
       {loading && schedules.length === 0 ? (
           <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-pink-500 border-t-transparent"></div>
-              <p className="mt-2 text-gray-500">Loading schedules...</p>
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-primary border-t-transparent"></div>
+              <p className="mt-2 text-gray-500 dark:text-gray-400 dark:text-gray-400">Loading schedules...</p>
           </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">
             {schedules.map((schedule) => (
             <div 
                 key={schedule.id} 
-                className={`bg-white shadow sm:rounded-lg border-l-4 ${schedule.isDefault ? 'border-pink-500' : 'border-gray-200'} overflow-hidden`}
+                className={`bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg border-l-4 ${schedule.isDefault ? 'border-primary' : 'border-gray-200 dark:border-gray-700 dark:border-gray-700'} overflow-hidden`}
             >
                 {editingId === schedule.id ? (
                 // Edit Mode
@@ -237,7 +237,7 @@ export default function PaymentScheduleSettings() {
                         type="text"
                         value={formData.name}
                         onChange={(e) => setFormData({...formData, name: e.target.value})}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                         />
                     </div>
                     <div>
@@ -246,40 +246,40 @@ export default function PaymentScheduleSettings() {
                         type="text"
                         value={formData.description}
                         onChange={(e) => setFormData({...formData, description: e.target.value})}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                         />
                     </div>
                     </div>
 
-                    <div className="border-t border-gray-200 pt-4">
-                    <h4 className="text-sm font-medium text-gray-900 mb-4">Payment Milestones</h4>
+                    <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-4">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white mb-4">Payment Milestones</h4>
                     <div className="space-y-3">
                         {formData.milestones.map((milestone, index) => (
-                        <div key={milestone.id} className="flex items-center gap-3 bg-gray-50 p-3 rounded-md">
+                        <div key={milestone.id} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-3 rounded-md">
                             <div className="flex-1">
-                            <label className="block text-xs font-medium text-gray-500">Name</label>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Name</label>
                             <input
                                 type="text"
                                 value={milestone.name}
                                 onChange={(e) => updateMilestone(index, 'name', e.target.value)}
-                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                             />
                             </div>
                             <div className="w-24">
-                            <label className="block text-xs font-medium text-gray-500">Percent %</label>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Percent %</label>
                             <input
                                 type="number"
                                 value={milestone.percentage}
                                 onChange={(e) => updateMilestone(index, 'percentage', parseFloat(e.target.value))}
-                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                             />
                             </div>
                             <div className="w-40">
-                            <label className="block text-xs font-medium text-gray-500">Due</label>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Due</label>
                             <select
                                 value={milestone.dueType}
                                 onChange={(e) => updateMilestone(index, 'dueType', e.target.value)}
-                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                             >
                                 <option value="on_booking">On Booking</option>
                                 <option value="before_event">Before Event</option>
@@ -288,16 +288,16 @@ export default function PaymentScheduleSettings() {
                             </div>
                             {milestone.dueType !== 'on_booking' && (
                             <div className="w-32">
-                                <label className="block text-xs font-medium text-gray-500">Days Offset</label>
+                                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Days Offset</label>
                                 <div className="relative mt-1 rounded-md shadow-sm">
                                 <input
                                     type="number"
                                     value={milestone.daysOffset}
                                     onChange={(e) => updateMilestone(index, 'daysOffset', parseInt(e.target.value))}
-                                    className="block w-full border-gray-300 rounded-md focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                                    className="block w-full border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm"
                                 />
                                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                    <span className="text-gray-500 sm:text-xs">days</span>
+                                    <span className="text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-xs">days</span>
                                 </div>
                                 </div>
                             </div>
@@ -315,23 +315,23 @@ export default function PaymentScheduleSettings() {
                     </div>
                     <button
                         onClick={addMilestone}
-                        className="mt-3 text-sm text-pink-600 hover:text-pink-800 font-medium flex items-center"
+                        className="mt-3 text-sm text-primary hover:text-pink-800 font-medium flex items-center"
                     >
                         <Plus className="h-4 w-4 mr-1" />
                         Add Milestone
                     </button>
                     </div>
 
-                    <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                    <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700 dark:border-gray-700">
                     <button
                         onClick={handleCancelEdit}
-                        className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                        className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSaveEdit}
-                        className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700"
+                        className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90"
                     >
                         Save Schedule
                     </button>
@@ -344,7 +344,7 @@ export default function PaymentScheduleSettings() {
                     <div className="flex items-center">
                         <Clock className="h-5 w-5 text-gray-400 mr-3" />
                         <div>
-                        <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white flex items-center">
                             {schedule.name}
                             {schedule.isDefault && (
                             <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
@@ -352,14 +352,14 @@ export default function PaymentScheduleSettings() {
                             </span>
                             )}
                         </h3>
-                        <p className="text-sm text-gray-500">{schedule.description}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{schedule.description}</p>
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
                         {!schedule.isDefault && (
                         <button
                             onClick={() => handleSetDefault(schedule.id)}
-                            className="text-sm text-gray-500 hover:text-pink-600 px-3 py-1"
+                            className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-primary px-3 py-1"
                         >
                             Set as Default
                         </button>
@@ -393,17 +393,17 @@ export default function PaymentScheduleSettings() {
                                 <div className="relative flex space-x-3">
                                 <div>
                                     <span className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center ring-8 ring-white">
-                                    <Calendar className="h-4 w-4 text-gray-500" />
+                                    <Calendar className="h-4 w-4 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
                                     </span>
                                 </div>
                                 <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
                                     <div>
-                                    <p className="text-sm text-gray-500">
-                                        <span className="font-medium text-gray-900">{milestone.name}</span>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                                        <span className="font-medium text-gray-900 dark:text-white dark:text-white">{milestone.name}</span>
                                         {' '}({milestone.percentage}%)
                                     </p>
                                     </div>
-                                    <div className="whitespace-nowrap text-right text-sm text-gray-500">
+                                    <div className="whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
                                     {milestone.dueType === 'on_booking' ? (
                                         <span className="text-green-600 font-medium">Due on Booking</span>
                                     ) : (

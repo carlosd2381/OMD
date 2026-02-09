@@ -323,16 +323,16 @@ export default function ExpenseCategorySettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Expense Categories</h2>
-            <p className="text-sm text-gray-500">Manage your chart of accounts for expense tracking.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Expense Categories</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Manage your chart of accounts for expense tracking.</p>
           </div>
         </div>
         <button
           onClick={handleAddParent}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700"
+          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90"
         >
           <Plus className="h-4 w-4 mr-2" />
           Add Category
@@ -341,14 +341,14 @@ export default function ExpenseCategorySettings() {
 
       {loading && categories.length === 0 ? (
           <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-pink-500 border-t-transparent"></div>
-              <p className="mt-2 text-gray-500">Loading categories...</p>
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-primary border-t-transparent"></div>
+              <p className="mt-2 text-gray-500 dark:text-gray-400 dark:text-gray-400">Loading categories...</p>
           </div>
       ) : (
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
             <ul className="divide-y divide-gray-200">
             {categories.map((parent) => (
-                <li key={parent.id} className={`bg-white ${!parent.isActive ? 'opacity-60' : ''}`}>
+                <li key={parent.id} className={`bg-white dark:bg-gray-800 dark:bg-gray-800 ${!parent.isActive ? 'opacity-60' : ''}`}>
                 <div className="px-4 py-4 sm:px-6">
                     <div className="flex items-center justify-between">
                     <div className="flex items-center flex-1 min-w-0">
@@ -367,7 +367,7 @@ export default function ExpenseCategorySettings() {
                         style={{ backgroundColor: parent.color }}
                         />
                         <div className="flex flex-col">
-                        <p className="text-sm font-medium text-gray-900 truncate flex items-center">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white dark:text-white truncate flex items-center">
                             {parent.name}
                             {!parent.isActive && (
                             <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
@@ -375,7 +375,7 @@ export default function ExpenseCategorySettings() {
                             </span>
                             )}
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">
                             {parent.children.length} sub-categories
                         </p>
                         </div>
@@ -383,7 +383,7 @@ export default function ExpenseCategorySettings() {
                     <div className="flex items-center space-x-2">
                         <button
                         onClick={() => handleAddChild(parent.id)}
-                        className="p-1 text-gray-400 hover:text-pink-600"
+                        className="p-1 text-gray-400 hover:text-primary"
                         title="Add Sub-category"
                         >
                         <Plus className="h-5 w-5" />
@@ -413,7 +413,7 @@ export default function ExpenseCategorySettings() {
                             <Circle className="h-2 w-2 mr-3 text-gray-300 fill-current" />
                             <span className={!child.isActive ? 'line-through' : ''}>{child.name}</span>
                             </div>
-                            <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center space-x-2">
                             <button
                                 onClick={() => handleEditChild(parent.id, child)}
                                 className="text-xs text-indigo-600 hover:text-indigo-900"
@@ -443,9 +443,9 @@ export default function ExpenseCategorySettings() {
 
       {/* Edit/Add Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
+        <div className="fixed inset-0 bg-gray-50 dark:bg-gray-700 dark:bg-gray-7000 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4">
               {editingParentId === null ? 'Add Category' : 
                editingChildId === 'PARENT_EDIT_MODE' ? 'Edit Category' :
                editingChildId === null ? 'Add Sub-category' : 'Edit Sub-category'}
@@ -458,7 +458,7 @@ export default function ExpenseCategorySettings() {
                   type="text"
                   value={modalName}
                   onChange={(e) => setModalName(e.target.value)}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                   autoFocus
                 />
               </div>
@@ -477,7 +477,7 @@ export default function ExpenseCategorySettings() {
                       type="text"
                       value={modalColor}
                       onChange={(e) => setModalColor(e.target.value)}
-                      className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                      className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                     />
                   </div>
                 </div>
@@ -487,13 +487,13 @@ export default function ExpenseCategorySettings() {
             <div className="mt-6 flex justify-end space-x-3">
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700"
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90"
               >
                 Save
               </button>

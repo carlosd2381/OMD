@@ -134,17 +134,17 @@ export default function PaymentMethodSettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Payment Methods</h2>
-            <p className="text-sm text-gray-500">Configure how you accept payments from clients.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Payment Methods</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Configure how you accept payments from clients.</p>
           </div>
         </div>
         <button
           onClick={handleSave}
           disabled={loading}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 disabled:opacity-50"
+          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
         >
           {loading ? 'Saving...' : 'Save Changes'}
         </button>
@@ -156,21 +156,21 @@ export default function PaymentMethodSettings() {
         <div className="space-y-6">
           
           {/* Stripe */}
-          <div className="bg-white shadow sm:rounded-lg p-6 border-l-4 border-indigo-500">
+          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6 border-l-4 border-indigo-500">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center">
                 <CreditCard className="h-5 w-5 mr-2 text-indigo-500" />
-                <h3 className="text-lg font-medium text-gray-900">Stripe</h3>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Stripe</h3>
               </div>
               <div className="flex items-center">
-                <span className="mr-3 text-sm text-gray-500">{methods.stripe.enabled ? 'Enabled' : 'Disabled'}</span>
+                <span className="mr-3 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{methods.stripe.enabled ? 'Enabled' : 'Disabled'}</span>
                 <button
                   onClick={() => updateMethod('stripe', 'enabled', !methods.stripe.enabled)}
                   className={`relative inline-flex shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
                     methods.stripe.enabled ? 'bg-indigo-600' : 'bg-gray-200'
                   }`}
                 >
-                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${methods.stripe.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white dark:bg-gray-800 dark:bg-gray-800 shadow transform ring-0 transition ease-in-out duration-200 ${methods.stripe.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
                 </button>
               </div>
             </div>
@@ -213,21 +213,21 @@ export default function PaymentMethodSettings() {
           </div>
 
           {/* PayPal */}
-          <div className="bg-white shadow sm:rounded-lg p-6 border-l-4 border-blue-500">
+          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6 border-l-4 border-blue-500">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center">
                 <CreditCard className="h-5 w-5 mr-2 text-blue-500" />
-                <h3 className="text-lg font-medium text-gray-900">PayPal</h3>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">PayPal</h3>
               </div>
               <div className="flex items-center">
-                <span className="mr-3 text-sm text-gray-500">{methods.paypal.enabled ? 'Enabled' : 'Disabled'}</span>
+                <span className="mr-3 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{methods.paypal.enabled ? 'Enabled' : 'Disabled'}</span>
                 <button
                   onClick={() => updateMethod('paypal', 'enabled', !methods.paypal.enabled)}
                   className={`relative inline-flex shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
                     methods.paypal.enabled ? 'bg-blue-600' : 'bg-gray-200'
                   }`}
                 >
-                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${methods.paypal.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white dark:bg-gray-800 dark:bg-gray-800 shadow transform ring-0 transition ease-in-out duration-200 ${methods.paypal.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
                 </button>
               </div>
             </div>
@@ -268,24 +268,24 @@ export default function PaymentMethodSettings() {
           </div>
 
           {/* International Transfers */}
-          <div className="bg-white shadow sm:rounded-lg p-6 border-l-4 border-green-500">
+          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6 border-l-4 border-green-500">
             <div className="flex items-center mb-4">
               <Globe className="h-5 w-5 mr-2 text-green-500" />
-              <h3 className="text-lg font-medium text-gray-900">International Transfers</h3>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">International Transfers</h3>
             </div>
             
             <div className="space-y-6">
               {/* Wise */}
-              <div className="border-b border-gray-200 pb-6 last:border-0 last:pb-0">
+              <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 pb-6 last:border-0 last:pb-0">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-sm font-medium text-gray-900">Wise (formerly TransferWise)</h4>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white">Wise (formerly TransferWise)</h4>
                   <button
                     onClick={() => updateMethod('wise', 'enabled', !methods.wise.enabled)}
                     className={`relative inline-flex shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${
                       methods.wise.enabled ? 'bg-green-600' : 'bg-gray-200'
                     }`}
                   >
-                    <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${methods.wise.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                    <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white dark:bg-gray-800 dark:bg-gray-800 shadow transform ring-0 transition ease-in-out duration-200 ${methods.wise.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
                   </button>
                 </div>
                 {methods.wise.enabled && (
@@ -316,14 +316,14 @@ export default function PaymentMethodSettings() {
               {/* Remitly */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-sm font-medium text-gray-900">Remitly</h4>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white">Remitly</h4>
                   <button
                     onClick={() => updateMethod('remitly', 'enabled', !methods.remitly.enabled)}
                     className={`relative inline-flex shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${
                       methods.remitly.enabled ? 'bg-green-600' : 'bg-gray-200'
                     }`}
                   >
-                    <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${methods.remitly.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                    <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white dark:bg-gray-800 dark:bg-gray-800 shadow transform ring-0 transition ease-in-out duration-200 ${methods.remitly.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
                   </button>
                 </div>
                 {methods.remitly.enabled && (
@@ -359,21 +359,21 @@ export default function PaymentMethodSettings() {
         <div className="space-y-6">
 
           {/* Direct Bank Transfer */}
-          <div className="bg-white shadow sm:rounded-lg p-6 border-l-4 border-gray-500">
+          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6 border-l-4 border-gray-500">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center">
-                <Building2 className="h-5 w-5 mr-2 text-gray-500" />
-                <h3 className="text-lg font-medium text-gray-900">Direct Bank Transfer</h3>
+                <Building2 className="h-5 w-5 mr-2 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Direct Bank Transfer</h3>
               </div>
               <div className="flex items-center">
-                <span className="mr-3 text-sm text-gray-500">{methods.bankTransfer.enabled ? 'Enabled' : 'Disabled'}</span>
+                <span className="mr-3 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{methods.bankTransfer.enabled ? 'Enabled' : 'Disabled'}</span>
                 <button
                   onClick={() => updateMethod('bankTransfer', 'enabled', !methods.bankTransfer.enabled)}
                   className={`relative inline-flex shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 ${
                     methods.bankTransfer.enabled ? 'bg-gray-600' : 'bg-gray-200'
                   }`}
                 >
-                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200 ${methods.bankTransfer.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white dark:bg-gray-800 dark:bg-gray-800 shadow transform ring-0 transition ease-in-out duration-200 ${methods.bankTransfer.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
                 </button>
               </div>
             </div>
@@ -430,10 +430,10 @@ export default function PaymentMethodSettings() {
           </div>
 
           {/* Cash Payments */}
-          <div className="bg-white shadow sm:rounded-lg p-6 border-l-4 border-yellow-500">
+          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6 border-l-4 border-yellow-500">
             <div className="flex items-center mb-4">
               <Banknote className="h-5 w-5 mr-2 text-yellow-500" />
-              <h3 className="text-lg font-medium text-gray-900">Cash Payments</h3>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Cash Payments</h3>
             </div>
             
             <div className="space-y-4">
@@ -446,7 +446,7 @@ export default function PaymentMethodSettings() {
                     onChange={(e) => updateMethod('cash', 'mxnEnabled', e.target.checked)}
                     className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
                   />
-                  <label htmlFor="cash-mxn" className="ml-2 block text-sm text-gray-900">
+                  <label htmlFor="cash-mxn" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
                     Accept MXN
                   </label>
                 </div>
@@ -458,7 +458,7 @@ export default function PaymentMethodSettings() {
                     onChange={(e) => updateMethod('cash', 'usdEnabled', e.target.checked)}
                     className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
                   />
-                  <label htmlFor="cash-usd" className="ml-2 block text-sm text-gray-900">
+                  <label htmlFor="cash-usd" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
                     Accept USD
                   </label>
                 </div>

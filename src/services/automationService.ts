@@ -3,8 +3,14 @@ import type { Database } from '../types/supabase';
 
 export interface WorkflowAction {
   id: string;
-  type: 'send_email' | 'create_task' | 'update_status' | 'webhook';
+  type: 'send_email' | 'create_task' | 'update_status' | 'webhook' | 'create_quote';
   config: Record<string, any>;
+}
+
+export interface WorkflowCondition {
+  field: string;
+  operator: 'equals' | 'not_equals' | 'contains';
+  value: string;
 }
 
 export interface Workflow {
@@ -12,6 +18,7 @@ export interface Workflow {
   name: string;
   active: boolean;
   trigger: string;
+  conditions: WorkflowCondition[];
   actions: WorkflowAction[];
 }
 
@@ -36,6 +43,7 @@ function mapToWorkflow(row: WorkflowRow): Workflow {
     name: row.name,
     active: row.active,
     trigger: row.trigger,
+    conditions: (row.conditions as unknown as WorkflowCondition[]) || [],
     actions: (row.actions as unknown as WorkflowAction[]) || [],
   };
 }
@@ -69,6 +77,7 @@ export const automationService = {
         name: workflow.name,
         active: workflow.active,
         trigger: workflow.trigger,
+        conditions: workflow.conditions as unknown as Database['public']['Tables']['workflows']['Update']['conditions'],
         actions: workflow.actions as unknown as Database['public']['Tables']['workflows']['Update']['actions'],
       };
       
@@ -87,6 +96,7 @@ export const automationService = {
         name: workflow.name,
         active: workflow.active,
         trigger: workflow.trigger,
+        conditions: workflow.conditions as unknown as Database['public']['Tables']['workflows']['Insert']['conditions'],
         actions: workflow.actions as unknown as Database['public']['Tables']['workflows']['Insert']['actions'],
       };
       

@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Copy, Code, Settings, GripVertical, ExternalLink, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { settingsService } from '../../services/settingsService';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-type FieldType = 'text' | 'email' | 'phone' | 'textarea' | 'date' | 'select' | 'checkbox';
+type FieldType = 'text' | 'email' | 'phone' | 'textarea' | 'date' | 'select' | 'multiselect' | 'checkbox';
 
 interface FormField {
   id: string;
@@ -172,7 +173,7 @@ export default function ContactFormSettings() {
       type,
       label: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
       required: false,
-      options: type === 'select' ? ['Option 1', 'Option 2'] : undefined
+      options: ['select', 'multiselect'].includes(type) ? ['Option 1', 'Option 2'] : undefined
     };
     
     updateFormFields([...currentForm.fields, newField]);
@@ -193,15 +194,34 @@ export default function ContactFormSettings() {
     updateFormFields(newFields);
   };
 
+  const onDragEnd = (result: any) => {
+    if (!result.destination || !currentForm) return;
+
+    const items = Array.from(currentForm.fields);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    updateFormFields(items);
+  };
+
   const updateSettings = (updates: Partial<ContactForm['settings']>) => {
     setForms(forms.map(f => f.id === selectedFormId ? { ...f, settings: { ...f.settings, ...updates } } : f));
   };
 
   const copyEmbedCode = () => {
     if (!currentForm) return;
-    const code = `<script src="https://api.omd-crm.com/forms/embed/${currentForm.id}.js"></script>`;
+    const baseUrl = window.location.origin;
+    const code = `<iframe src="${baseUrl}/forms/${currentForm.id}" width="100%" height="600px" frameborder="0"></iframe>`;
     navigator.clipboard.writeText(code);
     toast.success('Embed code copied to clipboard');
+  };
+
+  const copyDirectLink = () => {
+    if (!currentForm) return;
+    const baseUrl = window.location.origin;
+    const link = `${baseUrl}/forms/${currentForm.id}`;
+    navigator.clipboard.writeText(link);
+    toast.success('Direct link copied to clipboard');
   };
 
   if (!currentForm && !loading) {
@@ -217,18 +237,18 @@ export default function ContactFormSettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Contact Forms</h2>
-            <p className="text-sm text-gray-500">Create and manage lead capture forms.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Contact Forms</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Create and manage lead capture forms.</p>
           </div>
         </div>
         <div className="flex items-center space-x-3">
           <select 
             value={selectedFormId}
             onChange={(e) => setSelectedFormId(e.target.value)}
-            className="block w-48 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-pink-500 focus:border-pink-500 sm:text-sm rounded-md"
+            className="block w-48 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
           >
             {forms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
@@ -249,7 +269,7 @@ export default function ContactFormSettings() {
           <button
             onClick={handleSave}
             disabled={loading}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 disabled:opacity-50"
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 disabled:opacity-50"
           >
             {loading ? 'Saving...' : 'Save Changes'}
           </button>
@@ -257,14 +277,14 @@ export default function ContactFormSettings() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('editor')}
             className={`${
               activeTab === 'editor'
-                ? 'border-pink-500 text-pink-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Eye className="h-4 w-4 mr-2" />
@@ -274,8 +294,8 @@ export default function ContactFormSettings() {
             onClick={() => setActiveTab('settings')}
             className={`${
               activeTab === 'settings'
-                ? 'border-pink-500 text-pink-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Settings className="h-4 w-4 mr-2" />
@@ -285,8 +305,8 @@ export default function ContactFormSettings() {
             onClick={() => setActiveTab('embed')}
             className={`${
               activeTab === 'embed'
-                ? 'border-pink-500 text-pink-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Code className="h-4 w-4 mr-2" />
@@ -296,81 +316,99 @@ export default function ContactFormSettings() {
       </div>
 
       {/* Content */}
-      <div className="bg-white shadow sm:rounded-lg p-6 min-h-[500px]">
+      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6 min-h-[500px]">
         
         {/* Editor Tab */}
         {activeTab === 'editor' && currentForm && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Field List (Left) */}
             <div className="lg:col-span-2 space-y-4">
-              {currentForm.fields.map((field) => (
-                <div key={field.id} className="group relative bg-white border border-gray-200 rounded-lg p-4 hover:border-pink-300 transition-colors">
-                  <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-2">
-                    <button onClick={() => removeField(field.id)} className="text-red-400 hover:text-red-600">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                  
-                  <div className="flex items-start space-x-3">
-                    <div className="mt-2 cursor-move text-gray-400">
-                      <GripVertical className="h-5 w-5" />
-                    </div>
-                    <div className="flex-1 space-y-3">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500">Label</label>
-                          <input
-                            type="text"
-                            value={field.label}
-                            onChange={(e) => updateField(field.id, { label: e.target.value })}
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500">Placeholder</label>
-                          <input
-                            type="text"
-                            value={field.placeholder || ''}
-                            onChange={(e) => updateField(field.id, { placeholder: e.target.value })}
-                            disabled={['date', 'select', 'checkbox'].includes(field.type)}
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm disabled:bg-gray-50"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-4">
-                        <div className="flex items-center">
-                          <input
-                            id={`req-${field.id}`}
-                            type="checkbox"
-                            checked={field.required}
-                            onChange={(e) => updateField(field.id, { required: e.target.checked })}
-                            className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                          />
-                          <label htmlFor={`req-${field.id}`} className="ml-2 block text-sm text-gray-900">
-                            Required
-                          </label>
-                        </div>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                          {field.type}
-                        </span>
-                      </div>
+              <DragDropContext onDragEnd={onDragEnd}>
+                <Droppable droppableId="form-fields">
+                  {(provided) => (
+                    <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-4">
+                      {currentForm.fields.map((field, index) => (
+                        <Draggable key={field.id} draggableId={field.id} index={index}>
+                          {(provided) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              className="group relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-pink-300 transition-colors"
+                            >
+                              <div className="absolute right-4 top-4 flex items-center space-x-2">
+                                <button onClick={() => removeField(field.id)} className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-white dark:bg-gray-800 border border-gray-300 rounded hover:bg-red-50">
+                                  <Trash2 className="h-3 w-3 mr-1" />
+                                  Delete
+                                </button>
+                              </div>
+                              
+                              <div className="flex items-start space-x-3">
+                                <div {...provided.dragHandleProps} className="mt-2 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing">
+                                  <GripVertical className="h-5 w-5" />
+                                </div>
+                                <div className="flex-1 space-y-3">
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-500">Label</label>
+                                      <input
+                                        type="text"
+                                        value={field.label}
+                                        onChange={(e) => updateField(field.id, { label: e.target.value })}
+                                        className="mt-1 block w-full border-gray-300 border rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm px-3 py-2"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-500">Placeholder</label>
+                                      <input
+                                        type="text"
+                                        value={field.placeholder || ''}
+                                        onChange={(e) => updateField(field.id, { placeholder: e.target.value })}
+                                        disabled={['date', 'select', 'multiselect', 'checkbox'].includes(field.type)}
+                                        className="mt-1 block w-full border-gray-300 border rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm disabled:bg-gray-50 dark:bg-gray-700 px-3 py-2"
+                                      />
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex items-center space-x-4">
+                                    <div className="flex items-center">
+                                      <input
+                                        id={`req-${field.id}`}
+                                        type="checkbox"
+                                        checked={field.required}
+                                        onChange={(e) => updateField(field.id, { required: e.target.checked })}
+                                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                                      />
+                                      <label htmlFor={`req-${field.id}`} className="ml-2 block text-sm text-gray-900 dark:text-white">
+                                        Required
+                                      </label>
+                                    </div>
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                      {field.type}
+                                    </span>
+                                  </div>
 
-                      {field.type === 'select' && (
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Options (comma separated)</label>
-                          <input
-                            type="text"
-                            value={field.options?.join(', ')}
-                            onChange={(e) => updateField(field.id, { options: e.target.value.split(',').map(s => s.trim()) })}
-                            className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
-                          />
-                        </div>
-                      )}
+                                  {['select', 'multiselect'].includes(field.type) && (
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-500 mb-1">Options (comma separated)</label>
+                                      <input
+                                        type="text"
+                                        value={field.options?.join(', ')}
+                                        onChange={(e) => updateField(field.id, { options: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                                        className="block w-full border-gray-300 border rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm px-3 py-2"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
                     </div>
-                  </div>
-                </div>
-              ))}
+                  )}
+                </Droppable>
+              </DragDropContext>
               
               {currentForm.fields.length === 0 && (
                 <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg">
@@ -382,24 +420,27 @@ export default function ContactFormSettings() {
             {/* Toolbox (Right) */}
             <div className="lg:col-span-1">
               <div className="sticky top-6">
-                <h3 className="text-sm font-medium text-gray-900 mb-4">Add Fields</h3>
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-4">Add Fields</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => addField('text')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                  <button onClick={() => addField('text')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700">
                     Text
                   </button>
-                  <button onClick={() => addField('email')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                  <button onClick={() => addField('email')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700">
                     Email
                   </button>
-                  <button onClick={() => addField('phone')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                  <button onClick={() => addField('phone')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700">
                     Phone
                   </button>
-                  <button onClick={() => addField('date')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                  <button onClick={() => addField('date')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700">
                     Date
                   </button>
-                  <button onClick={() => addField('select')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                  <button onClick={() => addField('select')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700">
                     Dropdown
                   </button>
-                  <button onClick={() => addField('textarea')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                  <button onClick={() => addField('multiselect')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700">
+                    Multi-select
+                  </button>
+                  <button onClick={() => addField('textarea')} className="flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700">
                     Text Area
                   </button>
                 </div>
@@ -412,27 +453,27 @@ export default function ContactFormSettings() {
         {activeTab === 'settings' && currentForm && (
           <div className="max-w-2xl space-y-8">
             <div>
-                <h3 className="text-lg font-medium text-gray-900">Form Details</h3>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Form Details</h3>
                 <div className="mt-4">
                     <label className="block text-sm font-medium text-gray-700">Form Name</label>
                     <input
                         type="text"
                         value={currentForm.name}
                         onChange={(e) => setForms(forms.map(f => f.id === selectedFormId ? { ...f, name: e.target.value } : f))}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                     />
                 </div>
             </div>
 
             <div>
-              <h3 className="text-lg font-medium text-gray-900">Submission Actions</h3>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Submission Actions</h3>
               <div className="mt-4 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">On Success</label>
                   <select
                     value={currentForm.settings.successAction}
                     onChange={(e) => updateSettings({ successAction: e.target.value as any })}
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-pink-500 focus:border-pink-500 sm:text-sm rounded-md"
+                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
                   >
                     <option value="message">Show Message</option>
                     <option value="redirect">Redirect to URL</option>
@@ -446,7 +487,7 @@ export default function ContactFormSettings() {
                       rows={3}
                       value={currentForm.settings.successMessage}
                       onChange={(e) => updateSettings({ successMessage: e.target.value })}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                     />
                   </div>
                 ) : (
@@ -457,29 +498,29 @@ export default function ContactFormSettings() {
                       value={currentForm.settings.redirectUrl}
                       onChange={(e) => updateSettings({ redirectUrl: e.target.value })}
                       placeholder="https://yourwebsite.com/thank-you"
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                     />
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="border-t border-gray-200 pt-8">
-              <h3 className="text-lg font-medium text-gray-900">Notifications</h3>
+            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-8">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Notifications</h3>
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-700">Send Notifications To</label>
                 <input
                   type="email"
                   value={currentForm.settings.notifyEmail}
                   onChange={(e) => updateSettings({ notifyEmail: e.target.value })}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 sm:text-sm"
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                 />
-                <p className="mt-1 text-sm text-gray-500">Separate multiple emails with commas.</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Separate multiple emails with commas.</p>
               </div>
             </div>
 
-            <div className="border-t border-gray-200 pt-8">
-              <h3 className="text-lg font-medium text-gray-900">Security & Tracking</h3>
+            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-8">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Security & Tracking</h3>
               <div className="mt-4 space-y-4">
                 <div className="flex items-start">
                   <div className="flex items-center h-5">
@@ -488,12 +529,12 @@ export default function ContactFormSettings() {
                       type="checkbox"
                       checked={currentForm.settings.spamProtection}
                       onChange={(e) => updateSettings({ spamProtection: e.target.checked })}
-                      className="focus:ring-pink-500 h-4 w-4 text-pink-600 border-gray-300 rounded"
+                      className="focus:ring-primary h-4 w-4 text-primary border-gray-300 rounded"
                     />
                   </div>
                   <div className="ml-3 text-sm">
                     <label htmlFor="spam" className="font-medium text-gray-700">Enable Spam Protection</label>
-                    <p className="text-gray-500">Adds reCAPTCHA v3 to your form to prevent bot submissions.</p>
+                    <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">Adds reCAPTCHA v3 to your form to prevent bot submissions.</p>
                   </div>
                 </div>
 
@@ -504,12 +545,12 @@ export default function ContactFormSettings() {
                       type="checkbox"
                       checked={currentForm.settings.sourceTracking}
                       onChange={(e) => updateSettings({ sourceTracking: e.target.checked })}
-                      className="focus:ring-pink-500 h-4 w-4 text-pink-600 border-gray-300 rounded"
+                      className="focus:ring-primary h-4 w-4 text-primary border-gray-300 rounded"
                     />
                   </div>
                   <div className="ml-3 text-sm">
                     <label htmlFor="tracking" className="font-medium text-gray-700">Enable Source Tracking</label>
-                    <p className="text-gray-500">Automatically captures UTM parameters and referrer URL.</p>
+                    <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">Automatically captures UTM parameters and referrer URL.</p>
                   </div>
                 </div>
               </div>
@@ -520,22 +561,50 @@ export default function ContactFormSettings() {
         {/* Embed Tab */}
         {activeTab === 'embed' && currentForm && (
           <div className="space-y-6">
-            <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
+            <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-md border border-gray-200 dark:border-gray-700 dark:border-gray-700">
               <div className="flex justify-between items-center mb-2">
-                <h4 className="text-sm font-medium text-gray-900">JavaScript Embed Code</h4>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white">Website Embed Code (Iframe)</h4>
                 <button
                   onClick={copyEmbedCode}
-                  className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50"
+                  className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
                 >
                   <Copy className="h-3 w-3 mr-1" />
                   Copy
                 </button>
               </div>
               <code className="block bg-gray-900 text-gray-100 p-4 rounded text-sm font-mono overflow-x-auto">
-                {`<script src="https://api.omd-crm.com/forms/embed/${currentForm.id}.js"></script>`}
+                {`<iframe src="${window.location.origin}/forms/${currentForm.id}" width="100%" height="800px" frameborder="0"></iframe>`}
               </code>
-              <p className="mt-2 text-sm text-gray-500">
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
                 Paste this code into your website's HTML where you want the form to appear. It works with WordPress, Squarespace, Wix, and custom sites.
+              </p>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-md border border-gray-200 dark:border-gray-700 dark:border-gray-700">
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white">Direct URL</h4>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => window.open(`/forms/${currentForm.id}`, '_blank')}
+                    className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                  >
+                    <ExternalLink className="h-3 w-3 mr-1" />
+                    Preview
+                  </button>
+                  <button
+                    onClick={copyDirectLink}
+                    className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                  >
+                    <Copy className="h-3 w-3 mr-1" />
+                    Copy Link
+                  </button>
+                </div>
+              </div>
+              <p className="text-sm text-gray-900 dark:text-white font-mono bg-white dark:bg-gray-800 p-2 border rounded">
+                {`${window.location.origin}/forms/${currentForm.id}`}
+              </p>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                You can link directly to this form from your social media bio or email signature.
               </p>
             </div>
 

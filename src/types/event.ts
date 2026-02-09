@@ -25,18 +25,21 @@ export interface Event {
   setup_time?: string;
   start_time?: string;
   end_time?: string;
-  venue_contact_id?: string;
+  venue_contact_id?: string | null;
+  venue_address?: string | null;
+  venue_contact_name?: string | null;
+  venue_contact_phone?: string | null;
+  venue_contact_email?: string | null;
+  venue_sub_location?: string | null;
+  
+  planner_company?: string | null;
+  planner_name?: string | null;
+  planner_first_name?: string | null;
+  planner_last_name?: string | null;
+  planner_email?: string | null;
+  planner_phone?: string | null;
+  planner_instagram?: string | null;
+
   day_of_contact_name?: string;
   day_of_contact_phone?: string;
-
-  // New fields from v3 migration (Questionnaire support)
-  venue_sub_location?: string;
-  venue_contact_name?: string;
-  venue_contact_phone?: string;
-  venue_contact_email?: string;
-  planner_company?: string;
-  planner_name?: string;
-  planner_phone?: string;
-  planner_email?: string;
-  planner_instagram?: string;
 }

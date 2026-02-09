@@ -58,7 +58,13 @@
 - [x] Implement Client Hub Features
     <!-- Add Tasks, Files, and Portal Administration to Client Details -->
 
+- [x] Implement Tasks Section
+    <!-- Create centralized Task List and Task Modal -->
+
 ## Implementation Phase 3: Advanced Features & Polish
+
+- [x] Standardize Document IDs and List Views
+    <!-- Ensure consistent ID format (PREFIX-YYMMDD-001-V1) and uniform list layouts across Admin and Portal -->
 
 - [x] Implement PDF Generation
     <!-- Generate PDF documents for Quotes, Contracts, and Invoices -->
@@ -73,6 +79,9 @@
 
 - [x] Implement Branding Settings
     <!-- Configure logo, colors, and theme mode -->
+
+- [x] Implement Delivery Settings
+    <!-- Configure delivery fees and distance calculations -->
 
 - [x] Implement Calendar Settings
     <!-- Configure timezone, working hours, and sync options -->
