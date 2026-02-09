@@ -75,12 +75,14 @@ export function parseContractContentBlocks(html: string): ContractContentBlock[]
     blocks.push(block);
   };
 
+  type SegmentStyle = Pick<ContractTextSegment, 'bold' | 'italic' | 'underline'>;
+
   const collectSegments = (
     element: Element,
-    inherited?: ContractTextSegment
+    inherited?: SegmentStyle
   ): ContractTextSegment[] => {
     const segments: ContractTextSegment[] = [];
-    const walk = (node: ChildNode, active?: ContractTextSegment) => {
+    const walk = (node: ChildNode, active?: SegmentStyle) => {
       if (node.nodeType === Node.TEXT_NODE) {
         const normalized = (node.textContent ?? '').replace(/\s+/g, ' ');
         const trimmed = normalized.trim();
@@ -97,7 +99,7 @@ export function parseContractContentBlocks(html: string): ContractContentBlock[]
 
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       const el = node as HTMLElement;
-      const nextActive: ContractTextSegment = { ...(active || {}) };
+      const nextActive: SegmentStyle = { ...(active || {}) };
       const tag = el.tagName.toLowerCase();
       if (tag === 'strong' || tag === 'b') nextActive.bold = true;
       if (tag === 'em' || tag === 'i') nextActive.italic = true;
