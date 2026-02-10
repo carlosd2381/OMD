@@ -12,7 +12,8 @@ export const emailService = {
         // Just general inbox for now
         // query = query.in('status', ['unread', 'read']);
       } else {
-        query = query.eq('status', filters.status);
+        // Safe cast as we know the valid values from the filters
+        query = query.eq('status', filters.status as 'unread' | 'read' | 'archived');
       }
     }
 

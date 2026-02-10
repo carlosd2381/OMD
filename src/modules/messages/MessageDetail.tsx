@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { Mail, Reply, Forward, X, Download } from 'lucide-react';
+import { Mail, Reply, Forward, X } from 'lucide-react';
 import type { Email } from '../../types/email';
 
 interface MessageDetailProps {

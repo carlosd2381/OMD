@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Mail, Search, Paperclip, ChevronRight } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import type { Email } from '../../types/email';
 import { format } from 'date-fns';
 

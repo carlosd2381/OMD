@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Mail, Phone, Calendar, Users, MapPin, Tag, MessageSquare, UserPlus } from 'lucide-react';
+import { ArrowLeft, Edit, Mail, Phone, Calendar, Users, MapPin, Tag, UserPlus } from 'lucide-react';
 import { leadService } from '../../services/leadService';
 import { clientService } from '../../services/clientService';
 import { eventService } from '../../services/eventService';

@@ -39,6 +39,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      inbox_emails: {
+        Row: {
+          id: string
+          message_id: string
+          from_address: string
+          to_address: string
+          cc_address: string | null
+          subject: string
+          sent_at: string
+          received_at: string
+          text_body: string | null
+          html_body: string | null
+          source: string
+          status: 'unread' | 'read' | 'archived'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          message_id: string
+          from_address: string
+          to_address: string
+          cc_address?: string | null
+          subject: string
+          sent_at: string
+          received_at: string
+          text_body?: string | null
+          html_body?: string | null
+          source: string
+          status?: 'unread' | 'read' | 'archived'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          message_id?: string
+          from_address?: string
+          to_address?: string
+          cc_address?: string | null
+          subject?: string
+          sent_at?: string
+          received_at?: string
+          text_body?: string | null
+          html_body?: string | null
+          source?: string
+          status?: 'unread' | 'read' | 'archived'
+          created_at?: string
+        }
+        Relationships: []
+      },
       event_staff_assignments: {
         Row: {
           id: string
