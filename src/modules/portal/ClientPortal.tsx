@@ -480,41 +480,6 @@ export default function ClientPortal() {
     }
   };
 
-  const handleCompleteEvent = () => {
-    setEventStatus('completed');
-    toast.success('Event Marked as Completed (Demo)');
-  };
-
-  const handleResetPortal = async () => {
-    if (!portalClientId) return;
-    
-    const confirmed = await confirm({
-      title: 'Reset Portal Data',
-      message: 'Are you sure you want to reset all portal data? This will revert Quote, Contract, Questionnaire, and Invoice statuses.',
-      confirmLabel: 'Reset Everything',
-      type: 'danger'
-    });
-
-    if (confirmed) {
-      setLoading(true);
-      try {
-        await portalService.resetPortalData(portalClientId);
-        toast.success('Portal Data Reset Successfully');
-        // Reset local states
-        setEventStatus('upcoming');
-        setLegalName('');
-        setIsFillingQuestionnaire(false);
-        setActiveTab('overview');
-        await loadPortalData(portalClientId);
-      } catch (error) {
-        console.error('Error resetting portal:', error);
-        toast.error('Failed to reset portal data');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
   const handleDownloadQuote = async (targetQuote: Quote) => {
     if (!targetQuote || !client) {
       toast.error('Quote or client information is missing.');
