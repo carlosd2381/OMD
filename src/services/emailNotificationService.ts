@@ -13,7 +13,12 @@ const NOTIFICATION_BASE_URL = (import.meta.env.VITE_NOTIFICATIONS_API_URL || '')
 const EMAIL_ENDPOINT = NOTIFICATION_BASE_URL
   ? `${NOTIFICATION_BASE_URL}/notifications/email`
   : '/.netlify/functions/send-email';
-const CLIENT_PORTAL_URL = import.meta.env.VITE_CLIENT_PORTAL_URL?.trim();
+
+const getClientPortalUrl = (clientId: string) => {
+  const baseUrl = import.meta.env.VITE_CLIENT_PORTAL_URL?.trim() || `${window.location.origin}/portal`;
+  return `${baseUrl.replace(/\/$/, '')}/${clientId}`;
+};
+
 const CACHE_WINDOW = 5 * 60 * 1000; // 5 minutes
 
 type NotificationEventKey = 'quoteSent' | 'contractSigned' | 'invoicePaid';
@@ -240,6 +245,7 @@ export const emailNotificationService = {
 
     const event = await safeGetEvent(quote.event_id);
     const brandName = getBrandName(branding);
+    const portalUrl = getClientPortalUrl(client.id);
 
     const html = buildEmailTemplate({
       greeting: `Hi ${formatClientName(client)},`,
@@ -247,8 +253,8 @@ export const emailNotificationService = {
         ? `Your quote for ${event.name} is ready to review.`
         : 'Your quote is ready to review.',
       detailRows: buildQuoteDetails(quote, event),
-      ctaLabel: CLIENT_PORTAL_URL ? 'View Quote' : undefined,
-      ctaUrl: CLIENT_PORTAL_URL,
+      ctaLabel: 'View Quote',
+      ctaUrl: portalUrl,
       closing: `Warmly,<br/>${brandName}`,
       footer: 'You can reply directly to this email with any questions.'
     });
@@ -270,6 +276,7 @@ export const emailNotificationService = {
 
     const event = await safeGetEvent(contract.event_id);
     const brandName = getBrandName(branding);
+    const portalUrl = getClientPortalUrl(client.id);
 
     const html = buildEmailTemplate({
       greeting: `Hi ${formatClientName(client)},`,
@@ -277,8 +284,8 @@ export const emailNotificationService = {
         ? `We received your signed contract for ${event.name}.`
         : 'We received your signed contract.',
       detailRows: buildContractDetails(contract, event),
-      ctaLabel: CLIENT_PORTAL_URL ? 'Review Contract' : undefined,
-      ctaUrl: CLIENT_PORTAL_URL,
+      ctaLabel: 'Review Contract',
+      ctaUrl: portalUrl,
       closing: `Thank you for choosing ${brandName}!<br/>Our team will be in touch with next steps.`,
       footer: 'Need changes? Just reply to this email.'
     });
@@ -307,13 +314,14 @@ export const emailNotificationService = {
     const currency = financial?.currency || 'MXN';
     const normalizedInvoice = invoice.paid_at ? invoice : { ...invoice, paid_at: new Date().toISOString() };
     const amountDisplay = formatCurrency(invoice.total_amount, currency);
+    const portalUrl = getClientPortalUrl(client.id);
 
     const html = buildEmailTemplate({
       greeting: `Hi ${formatClientName(client)},`,
       intro: `We received your payment for invoice ${invoice.invoice_number}.`,
       detailRows: buildInvoiceDetails(normalizedInvoice, currency, event),
-      ctaLabel: CLIENT_PORTAL_URL ? 'View Invoice' : undefined,
-      ctaUrl: CLIENT_PORTAL_URL,
+      ctaLabel: 'View Invoice',
+      ctaUrl: portalUrl,
       closing: `Thank you for trusting ${brandName}.`,
       footer: 'This payment receipt was generated automatically.'
     });
@@ -334,6 +342,12 @@ export const emailNotificationService = {
 
     const event = await safeGetEvent(quote.event_id);
     const brandName = getBrandName(branding);
+    
+    // Attempt to lookup client ID from recipient or quote to build URL
+    // If recipient has ID, use that. If not, use quote.client_id
+    // But manual send might be to 'other' role without ID.
+    // However, if we are in manual send, quote.client_id should exist.
+    const portalUrl = getClientPortalUrl(quote.client_id);
 
     const html = buildEmailTemplate({
       greeting: `Hi ${recipient.name},`,
@@ -341,8 +355,8 @@ export const emailNotificationService = {
         ? `Your quote for ${event.name} is ready to review.`
         : 'Your quote is ready to review.',
       detailRows: buildQuoteDetails(quote, event),
-      ctaLabel: CLIENT_PORTAL_URL ? 'View Quote' : undefined,
-      ctaUrl: CLIENT_PORTAL_URL,
+      ctaLabel: 'View Quote',
+      ctaUrl: portalUrl,
       closing: `Warmly,<br/>${brandName}`,
       footer: 'You can reply directly to this email with any questions.'
     });
