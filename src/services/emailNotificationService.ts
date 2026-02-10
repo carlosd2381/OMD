@@ -324,5 +324,34 @@ export const emailNotificationService = {
       html,
       text: `Payment of ${amountDisplay} received for invoice ${invoice.invoice_number}.`
     }, settings);
+  },
+
+  async sendManualQuoteEmail(quote: Quote, recipient: { email: string; name: string }) {
+    const [settings, branding] = await Promise.all([loadEmailSettings(), loadBranding()]);
+    
+    // We don't check shouldSendEmail because this is a manual action, but we need settings
+    if (!settings) throw new Error("Email settings not configured");
+
+    const event = await safeGetEvent(quote.event_id);
+    const brandName = getBrandName(branding);
+
+    const html = buildEmailTemplate({
+      greeting: `Hi ${recipient.name},`,
+      intro: event?.name
+        ? `Your quote for ${event.name} is ready to review.`
+        : 'Your quote is ready to review.',
+      detailRows: buildQuoteDetails(quote, event),
+      ctaLabel: CLIENT_PORTAL_URL ? 'View Quote' : undefined,
+      ctaUrl: CLIENT_PORTAL_URL,
+      closing: `Warmly,<br/>${brandName}`,
+      footer: 'You can reply directly to this email with any questions.'
+    });
+
+    await postEmail({
+      to: recipient.email,
+      subject: `${brandName} • Your quote is ready`,
+      html,
+      text: `Your quote total is ${formatCurrency(quote.total_amount, quote.currency)}.`
+    }, settings);
   }
 };

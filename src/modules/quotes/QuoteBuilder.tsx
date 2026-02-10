@@ -18,6 +18,7 @@ import type { Client } from '../../types/client';
 import toast from 'react-hot-toast';
 
 import { bookingService } from '../../services/bookingService';
+import { emailNotificationService } from '../../services/emailNotificationService';
 
 export default function QuoteBuilder() {
   const navigate = useNavigate();
@@ -259,7 +260,7 @@ export default function QuoteBuilder() {
     setActionInProgress('send');
 
     try {
-      await saveQuote();
+      const savedQuote = await saveQuote();
 
       for (const recipient of selectedRecipients) {
         if (recipient.role.includes('Client')) {
@@ -273,6 +274,7 @@ export default function QuoteBuilder() {
         }
 
         console.log(`Sending email to ${recipient.email} (${recipient.role})`);
+        await emailNotificationService.sendManualQuoteEmail(savedQuote, { name: recipient.name, email: recipient.email });
       }
       
       toast.success(`Quote sent to ${selectedRecipients.length} recipient(s)`, { id: toastId });

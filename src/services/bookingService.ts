@@ -141,7 +141,7 @@ async function generateContract(quote: Quote, forceRegenerate: boolean) {
     .from('contracts')
     .select('id')
     .eq('quote_id', quote.id)
-    .single();
+    .maybeSingle();
 
   if (existing && !forceRegenerate) return;
 
@@ -189,7 +189,7 @@ async function generateQuestionnaire(quote: Quote, forceRegenerate: boolean) {
     .from('questionnaires')
     .select('id')
     .eq('quote_id', quote.id)
-    .single();
+    .maybeSingle();
 
   if (existing && !forceRegenerate) return;
 
