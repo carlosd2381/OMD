@@ -9,9 +9,10 @@ import type { Event } from '../types/event';
 import { formatCurrency } from '../utils/formatters';
 
 const DEFAULT_BRAND_NAME = 'Oh My Desserts MX';
-const DEFAULT_NOTIFICATIONS_API = 'http://localhost:3001';
-const NOTIFICATION_BASE_URL = (import.meta.env.VITE_NOTIFICATIONS_API_URL || DEFAULT_NOTIFICATIONS_API).replace(/\/$/, '');
-const EMAIL_ENDPOINT = `${NOTIFICATION_BASE_URL}/notifications/email`;
+const NOTIFICATION_BASE_URL = (import.meta.env.VITE_NOTIFICATIONS_API_URL || '').replace(/\/$/, '');
+const EMAIL_ENDPOINT = NOTIFICATION_BASE_URL
+  ? `${NOTIFICATION_BASE_URL}/notifications/email`
+  : '/.netlify/functions/send-email';
 const CLIENT_PORTAL_URL = import.meta.env.VITE_CLIENT_PORTAL_URL?.trim();
 const CACHE_WINDOW = 5 * 60 * 1000; // 5 minutes
 
