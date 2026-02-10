@@ -125,6 +125,17 @@ export const clientService = {
       .eq('id', id);
 
     if (error) throw error;
+
+    // If enabling access, ensuring the auth user exists or is invited
+    if (enabled) {
+      try {
+        await supabase.functions.invoke('invite-client', {
+          body: { clientId: id },
+        });
+      } catch (err) {
+        console.error("Failed to invoke invite-client after toggling access:", err);
+      }
+    }
   },
 
   async sendPortalInvite(id: string): Promise<void> {
