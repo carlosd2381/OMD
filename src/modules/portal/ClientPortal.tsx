@@ -77,8 +77,6 @@ export default function ClientPortal() {
   const [venue, setVenue] = useState<Venue | null>(null);
   const [planner, setPlanner] = useState<Planner | null>(null);
 
-  // Mock event status for the last step
-  const [eventStatus, setEventStatus] = useState<'upcoming' | 'completed'>('upcoming');
   const [legalName, setLegalName] = useState('');
   const [hasConfirmedAgreement, setHasConfirmedAgreement] = useState(false);
   const [isFillingQuestionnaire, setIsFillingQuestionnaire] = useState(false);
@@ -630,7 +628,7 @@ export default function ClientPortal() {
       case 'invoices':
         return !hasSignedContract || !hasInvoices;
       case 'reviews':
-        return eventStatus !== 'completed' || !invoicesPaid;
+        return event?.status !== 'completed' || !invoicesPaid;
       default:
         return false;
     }
