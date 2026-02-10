@@ -67,12 +67,21 @@ serve(async (req) => {
     let authUserId = client.auth_user_id as string | null;
 
     if (!authUserId) {
-      const { data: existing, error: getUserError } = await admin.auth.admin.getUserByEmail(client.email);
-      if (getUserError) {
-        console.error('invite-client: getUserByEmail failed', getUserError.message);
+      const { data: listData, error: listError } = await admin.auth.admin.listUsers({
+        page: 1,
+        perPage: 200,
+      });
+
+      if (listError) {
+        console.error('invite-client: listUsers failed', listError.message);
       }
-      if (existing?.user) {
-        authUserId = existing.user.id;
+
+      const existingUser = listData?.users?.find(
+        (user) => user.email?.toLowerCase() === client.email.toLowerCase()
+      );
+
+      if (existingUser) {
+        authUserId = existingUser.id;
       } else {
         const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(client.email);
         if (inviteError) {
