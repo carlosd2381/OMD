@@ -10,7 +10,8 @@ import {
   Briefcase,
   Inbox,
   CheckSquare,
-  DollarSign
+  DollarSign,
+  Mail
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useBranding } from '../../contexts/BrandingContext';
@@ -18,6 +19,7 @@ import { useBranding } from '../../contexts/BrandingContext';
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Leads', href: '/leads', icon: Inbox },
+  { name: 'Messages', href: '/messages', icon: Mail },
   { name: 'Clients', href: '/clients', icon: Users },
   { name: 'Venues', href: '/venues', icon: Building2 },
   { name: 'Planners', href: '/planners', icon: Briefcase },

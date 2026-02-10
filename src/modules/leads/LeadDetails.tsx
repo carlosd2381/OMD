@@ -8,6 +8,10 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import type { Lead } from '../../types/lead';
 import NotesTab from '../../components/NotesTab';
 import toast from 'react-hot-toast';
+import MessageList from '../messages/MessageList';
+import MessageDetail from '../messages/MessageDetail';
+import { emailService } from '../../services/emailService';
+import type { Email } from '../../types/email';
 
 export default function LeadDetails() {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +20,27 @@ export default function LeadDetails() {
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'messages' | 'notes'>('overview');
+  const [messages, setMessages] = useState<Email[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<Email | null>(null);
+
+  useEffect(() => {
+    if (activeTab === 'messages' && lead?.email) {
+      const loadMessages = async () => {
+        setMessagesLoading(true);
+        try {
+          const fetched = await emailService.getEmailsByContact(lead.email);
+          setMessages(fetched);
+        } catch (error) {
+          console.error("Failed to load messages", error);
+          toast.error("Failed to load messages");
+        } finally {
+          setMessagesLoading(false);
+        }
+      };
+      loadMessages();
+    }
+  }, [activeTab, lead?.email]);
 
   useEffect(() => {
     if (id) {
@@ -321,10 +346,18 @@ export default function LeadDetails() {
       )}
 
       {activeTab === 'messages' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg p-6 text-center">
-          <MessageSquare className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white dark:text-white">Messages</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Email and chat history coming soon.</p>
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden h-[600px] flex">
+          <div className={`${selectedMessage ? 'hidden md:flex' : 'flex'} w-full md:w-1/3 flex-col border-r border-gray-200 dark:border-gray-700`}>
+             <MessageList 
+               emails={messages} 
+               loading={messagesLoading} 
+               onSelectEmail={setSelectedMessage}
+               selectedEmailId={selectedMessage?.id}
+             />
+          </div>
+          <div className={`${selectedMessage ? 'flex' : 'hidden md:flex'} w-full md:w-2/3 flex-col`}>
+             <MessageDetail email={selectedMessage} onClose={() => setSelectedMessage(null)} />
+          </div>
         </div>
       )}
 

@@ -15,6 +15,7 @@ const MainLayout = lazy(() => import('./components/layout/MainLayout'));
 const Dashboard = lazy(() => import('./modules/dashboard/Dashboard'));
 const Calendar = lazy(() => import('./modules/calendar/Calendar'));
 const TaskList = lazy(() => import('./modules/tasks/TaskList'));
+const MessagesPage = lazy(() => import('./modules/messages/MessagesPage'));
 
 const ClientPortal = lazy(() => import('./modules/portal/ClientPortal'));
 const PublicContactForm = lazy(() => import('./modules/leads/PublicContactForm'));
@@ -97,6 +98,7 @@ function App() {
             </ProtectedRoute>
           }>
             <Route index element={<Dashboard />} />
+            <Route path="messages" element={<MessagesPage />} />
           <Route path="staff">
             <Route index element={<StaffList />} />
             <Route path=":id" element={<StaffProfileDetails />} />

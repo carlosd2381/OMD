@@ -29,6 +29,10 @@ import NotesTab from '../../components/NotesTab';
 import PortalAdminTab from './PortalAdminTab';
 import toast from 'react-hot-toast';
 import { currencyService } from '../../services/currencyService';
+import MessageList from '../messages/MessageList';
+import MessageDetail from '../messages/MessageDetail';
+import { emailService } from '../../services/emailService';
+import type { Email } from '../../types/email';
 
 type Tab = 'overview' | 'quotes' | 'questionnaires' | 'invoices' | 'contracts' | 'messages' | 'tasks' | 'notes' | 'files' | 'portal';
 
@@ -48,6 +52,9 @@ export default function ClientDetails() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [taskTemplates, setTaskTemplates] = useState<TaskTemplate[]>([]);
   const [files, setFiles] = useState<ClientFile[]>([]);
+  const [messages, setMessages] = useState<Email[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<Email | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [eventsMap, setEventsMap] = useState<Record<string, Event>>({});
   const [eventSequences, setEventSequences] = useState<Record<string, number>>({});
@@ -67,6 +74,23 @@ export default function ClientDetails() {
   const [uploadDescription, setUploadDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  useEffect(() => {
+    if (activeTab === 'messages' && client?.email) {
+      const loadMessages = async () => {
+        setMessagesLoading(true);
+        try {
+          const fetched = await emailService.getEmailsByContact(client.email);
+          setMessages(fetched);
+        } catch (error) {
+          console.error("Failed to load messages", error);
+          toast.error("Failed to load messages");
+        } finally {
+          setMessagesLoading(false);
+        }
+      };
+      loadMessages();
+    }
+  }, [activeTab, client?.email]);
 
   useEffect(() => {
     if (id) {
@@ -806,6 +830,22 @@ export default function ClientDetails() {
             ) : (
               <div className="p-6 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">No invoices found.</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'messages' && (
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden h-[600px] flex">
+          <div className={`${selectedMessage ? 'hidden md:flex' : 'flex'} w-full md:w-1/3 flex-col border-r border-gray-200 dark:border-gray-700`}>
+             <MessageList 
+               emails={messages} 
+               loading={messagesLoading} 
+               onSelectEmail={setSelectedMessage}
+               selectedEmailId={selectedMessage?.id}
+             />
+          </div>
+          <div className={`${selectedMessage ? 'flex' : 'hidden md:flex'} w-full md:w-2/3 flex-col`}>
+             <MessageDetail email={selectedMessage} onClose={() => setSelectedMessage(null)} />
           </div>
         </div>
       )}
