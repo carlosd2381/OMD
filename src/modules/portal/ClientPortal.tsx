@@ -743,51 +743,32 @@ export default function ClientPortal() {
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Welcome to your Event Portal</h2>
                   <p className="mt-2 text-gray-500 dark:text-gray-400 dark:text-gray-400">Track your planning progress, view documents, and manage payments.</p>
                   <div className="mt-8 flex justify-center space-x-4">
-                    <div className="text-center">
-                      <div className={`rounded-full p-3 ${quote?.status === 'accepted' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                    <div className="text-center cursor-pointer" onClick={() => !isTabLocked('quotes') && setActiveTab('quotes')}>
+                      <div className={`rounded-full p-3 ${quote?.status === 'accepted' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'} hover:opacity-80 transition-opacity`}>
                         <DollarSign className="h-6 w-6" />
                       </div>
-                      <span className="text-xs mt-1 block">Quote</span>
+                      <span className="text-xs mt-1 block group-hover:text-primary">Quote</span>
                     </div>
-                    <div className="w-8 border-t-2 border-gray-200 dark:border-gray-700 dark:border-gray-700 mt-6"></div>
-                    <div className="text-center">
-                      <div className={`rounded-full p-3 ${questionnaire?.status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                    <div className="w-8 border-t-2 border-gray-200 dark:border-gray-700 mt-6"></div>
+                    <div className="text-center cursor-pointer" onClick={() => !isTabLocked('questionnaires') && setActiveTab('questionnaires')}>
+                      <div className={`rounded-full p-3 ${questionnaire?.status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'} hover:opacity-80 transition-opacity`}>
                         <CheckSquare className="h-6 w-6" />
                       </div>
                       <span className="text-xs mt-1 block">Details</span>
                     </div>
-                    <div className="w-8 border-t-2 border-gray-200 dark:border-gray-700 dark:border-gray-700 mt-6"></div>
-                    <div className="text-center">
-                      <div className={`rounded-full p-3 ${contract?.status === 'signed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                    <div className="w-8 border-t-2 border-gray-200 dark:border-gray-700 mt-6"></div>
+                    <div className="text-center cursor-pointer" onClick={() => !isTabLocked('contracts') && setActiveTab('contracts')}>
+                      <div className={`rounded-full p-3 ${contract?.status === 'signed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'} hover:opacity-80 transition-opacity`}>
                         <PenTool className="h-6 w-6" />
                       </div>
                       <span className="text-xs mt-1 block">Contract</span>
                     </div>
-                    <div className="w-8 border-t-2 border-gray-200 dark:border-gray-700 dark:border-gray-700 mt-6"></div>
-                    <div className="text-center">
-                      <div className={`rounded-full p-3 ${invoice?.status === 'paid' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                    <div className="w-8 border-t-2 border-gray-200 dark:border-gray-700 mt-6"></div>
+                    <div className="text-center cursor-pointer" onClick={() => !isTabLocked('invoices') && setActiveTab('invoices')}>
+                      <div className={`rounded-full p-3 ${invoice?.status === 'paid' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'} hover:opacity-80 transition-opacity`}>
                         <FileText className="h-6 w-6" />
                       </div>
                       <span className="text-xs mt-1 block">Invoice</span>
-                    </div>
-                  </div>
-                  
-                  {/* Demo Control */}
-                  <div className="mt-12 border-t pt-6">
-                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-4">Demo Controls</p>
-                    <div className="flex space-x-4">
-                      <button 
-                        onClick={handleCompleteEvent}
-                        className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded"
-                      >
-                        Simulate Event Completion
-                      </button>
-                      <button 
-                        onClick={handleResetPortal}
-                        className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1 rounded border border-red-200"
-                      >
-                        Reset Portal Data
-                      </button>
                     </div>
                   </div>
                 </div>
