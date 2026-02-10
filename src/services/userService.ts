@@ -54,6 +54,18 @@ function mapToSession(row: SessionRow & { users: UserRow | null }): Session {
 }
 
 export const userService = {
+  getUserByAuthId: async (authUserId: string): Promise<User | null> => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return null;
+    return mapToUser(data);
+  },
+
   getUsers: async (): Promise<User[]> => {
     const { data, error } = await supabase
       .from('users')

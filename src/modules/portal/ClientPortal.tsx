@@ -31,6 +31,7 @@ import type { Invoice } from '../../types/invoice';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { userService } from '../../services/userService';
 
 type PortalTab = 'overview' | 'quotes' | 'questionnaires' | 'contracts' | 'invoices' | 'reviews';
 
@@ -148,20 +149,35 @@ export default function ClientPortal() {
       setPortalError(null);
       try {
         const linkedClient = await clientService.getClientByAuthUser(user.id);
-        if (!linkedClient) {
-          setPortalError('No client profile is linked to this account.');
-          setLoading(false);
-          return;
+        
+        let targetClientId = linkedClient?.id;
+
+        // If not linked or ID doesn't match, check if Admin/Staff
+        if ((!linkedClient || (clientId && linkedClient.id !== clientId))) {
+          const linkedStaff = await userService.getUserByAuthId(user.id);
+          // Check if admin/staff role
+          if (linkedStaff && ['admin', 'super_admin', 'manager', 'planner'].some(r => linkedStaff.role.includes(r))) {
+            // Admin can view any portal they requested via URL
+             if (clientId) {
+                targetClientId = clientId;
+             }
+          }
         }
 
-        if (clientId && linkedClient.id !== clientId) {
-          setPortalError('This portal link does not match your account.');
-          setLoading(false);
-          return;
+        if (!targetClientId) {
+           setPortalError('No client profile is linked to this account.');
+           setLoading(false);
+           return;
         }
 
-        setPortalClientId(linkedClient.id);
-        await loadPortalData(linkedClient.id);
+        if (clientId && targetClientId !== clientId) {
+           setPortalError('This portal link does not match your account.');
+           setLoading(false);
+           return;
+        }
+
+        setPortalClientId(targetClientId);
+        await loadPortalData(targetClientId);
       } catch (error) {
         console.error('Error initializing portal:', error);
         toast.error('Failed to load portal data');
