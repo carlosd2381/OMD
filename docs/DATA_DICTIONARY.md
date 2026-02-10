@@ -153,6 +153,24 @@ This document serves as the central reference for all data entities, their field
 | Details | `details` | string | No | |
 | Created By | `created_by` | string | Yes | User ID/Name |
 
+### Inbox Emails (`inbox_emails` table)
+*Used for syncing Zoho IMAP inbox messages into the app.*
+| UI Label | Field Name (Code/DB) | Type | Required | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Message ID | `message_id` | string | Yes | Unique message identifier |
+| From | `from_address` | string | Yes | Sender address |
+| To | `to_address` | string | Yes | Recipient list |
+| CC | `cc_address` | string | No | Carbon copy list |
+| Subject | `subject` | string | No | |
+| Sent At | `sent_at` | timestamp | No | Email date header |
+| Received At | `received_at` | timestamp | No | When synced |
+| Text Body | `text_body` | text | No | Plain text content |
+| HTML Body | `html_body` | text | No | HTML content |
+| Source | `source` | string | No | Default `zoho` |
+| Status | `status` | string | No | Default `unread` |
+| (System) | `id` | uuid | Yes | Primary Key |
+| (System) | `created_at` | timestamp | Yes | |
+
 ## 2. Financials & Contracts (Client Portal)
 
 ### Quotes (`quotes` table)

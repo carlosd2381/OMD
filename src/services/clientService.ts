@@ -128,15 +128,37 @@ export const clientService = {
   },
 
   async sendPortalInvite(id: string): Promise<void> {
-    // TODO: Implement actual email sending logic (e.g. via Edge Function)
-    console.log('Sending portal invite to client:', id);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const client = await clientService.getClient(id);
+    if (!client?.email) throw new Error('Client email is missing');
+
+    const portalBaseUrl = import.meta.env.VITE_PORTAL_URL || window.location.origin;
+    const redirectTo = `${portalBaseUrl}/auth/update-password`;
+
+    const { error } = await supabase.functions.invoke('invite-client', {
+      body: { clientId: id },
+    });
+
+    if (error) throw error;
+
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(client.email, {
+      redirectTo,
+    });
+
+    if (resetError) throw resetError;
   },
 
   async resetPortalPassword(id: string): Promise<void> {
-    // TODO: Implement actual password reset logic
-    console.log('Resetting portal password for client:', id);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const client = await clientService.getClient(id);
+    if (!client?.email) throw new Error('Client email is missing');
+
+    const portalBaseUrl = import.meta.env.VITE_PORTAL_URL || window.location.origin;
+    const redirectTo = `${portalBaseUrl}/auth/update-password`;
+
+    const { error } = await supabase.auth.resetPasswordForEmail(client.email, {
+      redirectTo,
+    });
+
+    if (error) throw error;
   }
 };
 
