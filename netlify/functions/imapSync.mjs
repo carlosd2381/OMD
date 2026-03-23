@@ -60,10 +60,14 @@ const supabaseAdmin = () =>
   });
 
 export const handler = async () => {
+  let host = null;
+  let port = null;
+  let secure = null;
+
   try {
-    const host = firstAvailableEnv(['IMAP_HOST', 'ZOHO_IMAP_HOST']);
+    host = firstAvailableEnv(['IMAP_HOST', 'ZOHO_IMAP_HOST']);
     const portRaw = firstAvailableEnv(['IMAP_PORT', 'ZOHO_IMAP_PORT']);
-    const port = Number(portRaw);
+    port = Number(portRaw);
     if (!Number.isFinite(port) || port <= 0) {
       throw new Error(`Invalid IMAP port: ${portRaw}`);
     }
@@ -71,7 +75,7 @@ export const handler = async () => {
     const user = firstAvailableEnv(['IMAP_USER', 'ZOHO_IMAP_USER']);
     const pass = firstAvailableEnv(['IMAP_PASS', 'ZOHO_IMAP_PASS']);
     const secureDefault = port === 993;
-    const secure = parseBooleanEnv(process.env.IMAP_SECURE, secureDefault);
+    secure = parseBooleanEnv(process.env.IMAP_SECURE, secureDefault);
     const rejectUnauthorized = parseBooleanEnv(process.env.IMAP_TLS_REJECT_UNAUTHORIZED, true);
 
     const imap = new ImapFlow({
@@ -149,6 +153,11 @@ export const handler = async () => {
         ok: false,
         error: normalized.message || 'IMAP sync failed',
         details: normalized,
+        connection: {
+          host,
+          port,
+          secure,
+        },
       }),
     };
   }

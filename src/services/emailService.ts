@@ -54,7 +54,16 @@ export const emailService = {
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      const parts = [payload?.error, payload?.details?.responseText, payload?.details?.command]
+      const parts = [
+        payload?.error,
+        payload?.details?.responseText,
+        payload?.details?.command,
+        payload?.details?.code,
+        payload?.details?.cause?.code,
+        payload?.connection?.host ? `host=${payload.connection.host}` : null,
+        payload?.connection?.port ? `port=${payload.connection.port}` : null,
+        typeof payload?.connection?.secure === 'boolean' ? `secure=${payload.connection.secure}` : null,
+      ]
         .filter(Boolean)
         .map(String);
 
