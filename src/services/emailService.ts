@@ -54,7 +54,11 @@ export const emailService = {
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      throw new Error(payload?.error || 'Failed to sync inbox');
+      const parts = [payload?.error, payload?.details?.responseText, payload?.details?.command]
+        .filter(Boolean)
+        .map(String);
+
+      throw new Error(parts.join(' | ') || 'Failed to sync inbox');
     }
 
     return {

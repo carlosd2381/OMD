@@ -22,6 +22,38 @@ const firstAvailableEnv = (keys) => {
   throw new Error(`Missing one of required env vars: ${keys.join(', ')}`);
 };
 
+const parseBooleanEnv = (value, fallback) => {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+};
+
+const normalizeImapError = (error) => {
+  if (!(error instanceof Error)) {
+    return { message: String(error) };
+  }
+
+  const details = {
+    message: error.message,
+    name: error.name,
+    code: error.code || null,
+    command: error.command || null,
+    responseText: error.responseText || null,
+  };
+
+  if (error.cause instanceof Error) {
+    details.cause = {
+      message: error.cause.message,
+      name: error.cause.name,
+      code: error.cause.code || null,
+    };
+  }
+
+  return details;
+};
+
 const supabaseAdmin = () =>
   createClient(requiredEnv('SUPABASE_URL'), requiredEnv('SUPABASE_SERVICE_ROLE_KEY'), {
     auth: { persistSession: false },
@@ -38,16 +70,18 @@ export const handler = async () => {
 
     const user = firstAvailableEnv(['IMAP_USER', 'ZOHO_IMAP_USER']);
     const pass = firstAvailableEnv(['IMAP_PASS', 'ZOHO_IMAP_PASS']);
-    const secureRaw = process.env.IMAP_SECURE;
-    const secure = typeof secureRaw === 'string'
-      ? ['1', 'true', 'yes', 'on'].includes(secureRaw.toLowerCase())
-      : true;
+    const secureDefault = port === 993;
+    const secure = parseBooleanEnv(process.env.IMAP_SECURE, secureDefault);
+    const rejectUnauthorized = parseBooleanEnv(process.env.IMAP_TLS_REJECT_UNAUTHORIZED, true);
 
     const imap = new ImapFlow({
       host,
       port,
       secure,
       auth: { user, pass },
+      tls: {
+        rejectUnauthorized,
+      },
     });
 
     await imap.connect();
@@ -107,12 +141,14 @@ export const handler = async () => {
       body: JSON.stringify({ ok: true }),
     };
   } catch (error) {
+    const normalized = normalizeImapError(error);
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: normalized.message || 'IMAP sync failed',
+        details: normalized,
       }),
     };
   }
