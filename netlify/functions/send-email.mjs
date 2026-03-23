@@ -18,7 +18,7 @@ export const handler = async (event) => {
       return jsonResponse(400, { error: 'SMTP settings are incomplete.' });
     }
 
-    if (!message?.to || !message?.subject || !message?.html) {
+    if (!message?.to || !message?.subject || (!message?.html && !message?.text)) {
       return jsonResponse(400, { error: 'Email message is incomplete.' });
     }
 
@@ -38,15 +38,32 @@ export const handler = async (event) => {
     const fromName = sender?.name || 'Oh My Churros MX';
     const fromEmail = sender?.email || smtpConfig.username;
 
-    await transporter.sendMail({
+    const attachments = Array.isArray(message.attachments)
+      ? message.attachments
+          .filter((attachment) => attachment?.filename && attachment?.content)
+          .map((attachment) => ({
+            filename: attachment.filename,
+            content: attachment.content,
+            encoding: 'base64',
+            contentType: attachment.contentType || 'application/octet-stream',
+          }))
+      : [];
+
+    const info = await transporter.sendMail({
       from: `${fromName} <${fromEmail}>`,
       to: message.to,
+      cc: message.cc,
+      bcc: message.bcc,
       subject: message.subject,
       html: message.html,
       text: message.text,
+      replyTo: sender?.replyTo,
+      inReplyTo: message.inReplyTo,
+      references: message.references,
+      attachments,
     });
 
-    return jsonResponse(200, { ok: true });
+    return jsonResponse(200, { ok: true, message_id: info?.messageId || null });
   } catch (error) {
     return jsonResponse(500, { error: error instanceof Error ? error.message : String(error) });
   }

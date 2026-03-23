@@ -1,13 +1,43 @@
+import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { Mail, Reply, Forward, X } from 'lucide-react';
+import { Loader2, Mail, Paperclip, Reply, X } from 'lucide-react';
 import type { Email } from '../../types/email';
 
 interface MessageDetailProps {
   email: Email | null;
   onClose?: () => void;
+  onSendReply?: (payload: { email: Email; body: string; attachments: File[] }) => Promise<void>;
 }
 
-export default function MessageDetail({ email, onClose }: MessageDetailProps) {
+export default function MessageDetail({ email, onClose, onSendReply }: MessageDetailProps) {
+  const [isReplying, setIsReplying] = useState(false);
+  const [replyBody, setReplyBody] = useState('');
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [sending, setSending] = useState(false);
+
+  const canSend = useMemo(
+    () => Boolean(email && onSendReply && replyBody.trim().length > 0 && !sending),
+    [email, onSendReply, replyBody, sending]
+  );
+
+  const handleAddAttachments = (incomingFiles: FileList | null) => {
+    if (!incomingFiles?.length) return;
+    setAttachments((prev) => [...prev, ...Array.from(incomingFiles)]);
+  };
+
+  const handleSend = async () => {
+    if (!email || !onSendReply || !replyBody.trim()) return;
+    setSending(true);
+    try {
+      await onSendReply({ email, body: replyBody.trim(), attachments });
+      setReplyBody('');
+      setAttachments([]);
+      setIsReplying(false);
+    } finally {
+      setSending(false);
+    }
+  };
+
   if (!email) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700">
@@ -67,21 +97,62 @@ export default function MessageDetail({ email, onClose }: MessageDetailProps) {
       </div>
 
       {/* Footer Actions (Placeholder for future Reply implementation) */}
-      <div className="border-t border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900 flex space-x-3">
+      <div className="border-t border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900 space-y-3">
         <button 
           className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none"
-          onClick={() => {}} // TODO: Reply
+          onClick={() => setIsReplying((prev) => !prev)}
         >
           <Reply className="h-4 w-4 mr-2" />
-          Reply
+          {isReplying ? 'Cancel Reply' : 'Reply'}
         </button>
-        <button 
-          className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none"
-          onClick={() => {}} // TODO: Forward
-        >
-          <Forward className="h-4 w-4 mr-2" />
-          Forward
-        </button>
+
+        {isReplying && (
+          <div className="space-y-3 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+            <textarea
+              value={replyBody}
+              onChange={(event) => setReplyBody(event.target.value)}
+              rows={5}
+              placeholder="Write your reply..."
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+
+            <div className="flex items-center justify-between gap-3">
+              <label className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
+                <Paperclip className="h-4 w-4 mr-2" />
+                Attach files
+                <input
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={(event) => handleAddAttachments(event.target.files)}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={!canSend}
+                onClick={handleSend}
+                className="inline-flex items-center px-4 py-2 rounded-md bg-primary text-white text-sm font-medium disabled:opacity-60"
+              >
+                {sending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  'Send Reply'
+                )}
+              </button>
+            </div>
+
+            {attachments.length > 0 && (
+              <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                {attachments.map((attachment, index) => (
+                  <div key={`${attachment.name}-${index}`}>{attachment.name}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

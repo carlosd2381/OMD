@@ -171,6 +171,75 @@ This document serves as the central reference for all data entities, their field
 | (System) | `id` | uuid | Yes | Primary Key |
 | (System) | `created_at` | timestamp | Yes | |
 
+### Conversations (`conversations` table)
+*Unified inbox thread container across Email, Facebook Messenger, and Instagram.*
+| UI Label | Field Name (Code/DB) | Type | Required | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Channel | `channel` | enum | Yes | email, facebook, instagram |
+| External Thread ID | `external_thread_id` | string | No | Provider thread id; unique per channel |
+| Subject | `subject` | string | No | Used primarily for email |
+| Linked Client | `client_id` | uuid | No | Foreign Key to `clients` |
+| Status | `status` | enum | Yes | open, pending, closed |
+| Assigned User | `assigned_user_id` | uuid | No | Foreign Key to `users` |
+| Last Message At | `last_message_at` | timestamp | No | Used for inbox ordering |
+| Unread Count | `unread_count` | number | Yes | Counter for new inbound messages |
+| (System) | `id` | uuid | Yes | Primary Key |
+| (System) | `created_at` | timestamp | Yes | |
+| (System) | `updated_at` | timestamp | Yes | |
+
+### Conversation Participants (`conversation_participants` table)
+*Contacts involved in a conversation (client/admin/provider/etc.).*
+| UI Label | Field Name (Code/DB) | Type | Required | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Conversation | `conversation_id` | uuid | Yes | Foreign Key |
+| Role | `role` | enum | Yes | client, admin, venue, provider, planner, other |
+| Display Name | `display_name` | string | No | Contact display label |
+| Email | `email` | string | No | Unique per conversation |
+| Phone | `phone` | string | No | |
+| Social Handle | `social_handle` | string | No | Username/handle |
+| External User ID | `external_user_id` | string | No | Provider-specific contact id |
+| (System) | `id` | uuid | Yes | Primary Key |
+| (System) | `created_at` | timestamp | Yes | |
+
+### Conversation Messages (`conversation_messages` table)
+*Individual inbound/outbound messages in a unified conversation.*
+| UI Label | Field Name (Code/DB) | Type | Required | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Conversation | `conversation_id` | uuid | Yes | Foreign Key |
+| Sender Participant | `sender_participant_id` | uuid | No | Foreign Key |
+| Direction | `direction` | enum | Yes | inbound, outbound |
+| Body Text | `body_text` | text | No | Plain text body |
+| Body HTML | `body_html` | text | No | Rich body for email |
+| External Message ID | `external_message_id` | string | No | Provider message id |
+| Sent At | `sent_at` | timestamp | Yes | |
+| Delivery Status | `delivery_status` | string | No | sent, delivered, failed, etc. |
+| Error | `error` | string | No | Failure reason if any |
+| (System) | `id` | uuid | Yes | Primary Key |
+| (System) | `created_at` | timestamp | Yes | |
+
+### Message Attachments (`message_attachments` table)
+*File metadata associated with a unified message.*
+| UI Label | Field Name (Code/DB) | Type | Required | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Message | `message_id` | uuid | Yes | Foreign Key |
+| Storage Path | `storage_path` | string | No | Path in storage/bucket |
+| Filename | `filename` | string | Yes | Original filename |
+| MIME Type | `mime_type` | string | No | e.g. image/png, application/pdf |
+| Size | `size_bytes` | number | No | Bytes |
+| (System) | `id` | uuid | Yes | Primary Key |
+| (System) | `created_at` | timestamp | Yes | |
+
+### Contact Identities (`contact_identities` table)
+*Lookup identities used for auto-linking conversations to client profiles.*
+| UI Label | Field Name (Code/DB) | Type | Required | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Client | `client_id` | uuid | Yes | Foreign Key |
+| Identity Type | `type` | enum | Yes | email, phone, facebook, instagram |
+| Identity Value | `value` | string | Yes | Normalized lookup value |
+| Is Primary | `is_primary` | boolean | Yes | Marks preferred identity |
+| (System) | `id` | uuid | Yes | Primary Key |
+| (System) | `created_at` | timestamp | Yes | |
+
 ## 2. Financials & Contracts (Client Portal)
 
 ### Quotes (`quotes` table)

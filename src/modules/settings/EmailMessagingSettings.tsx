@@ -568,7 +568,7 @@ export default function EmailMessagingSettings() {
                   <p className="text-sm text-blue-700 dark:text-blue-300">
                     To receive messages, you must also configure Webhooks in your Meta App Dashboard.
                     <br />
-                    Callback URL: <code className="bg-blue-100 dark:bg-blue-900 px-1 py-0.5 rounded">https://your-project.supabase.co/functions/v1/meta-webhook</code>
+                    Callback URL: <code className="bg-blue-100 dark:bg-blue-900 px-1 py-0.5 rounded">https://your-domain.com/.netlify/functions/meta-webhook</code>
                   </p>
                 </div>
               </div>

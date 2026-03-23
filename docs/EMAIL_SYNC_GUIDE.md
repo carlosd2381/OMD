@@ -81,3 +81,75 @@ You setup a specific forwarding address (e.g., `crm@yourcompany.com`) or domain 
 Start with **Option 2 (Edge Functions)** if you are comfortable with TypeScript and APIs, as it keeps everything inside your current stack.
 
 If you want to get it running today with zero coding, use **Option 1 (n8n or Make)**.
+
+---
+
+## Meta Messenger + Instagram Direct (Unified Inbox)
+
+The project now includes Netlify functions for Meta message ingest and outbound replies:
+
+- `/.netlify/functions/meta-webhook` (GET verify + POST ingest)
+- `/.netlify/functions/send-social` (POST outbound message)
+
+### Required Environment Variables
+
+Set these in Netlify Environment Variables:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `META_WEBHOOK_VERIFY_TOKEN` (your custom verify token)
+- `META_APP_SECRET` (optional but recommended; validates `X-Hub-Signature-256`)
+
+### Storage Bucket (Attachments)
+
+- Social/email message attachments now use dedicated storage bucket:
+    - `messages-attachments`
+- Bucket + policies are created via migration:
+    - `supabase/migrations/20260323010000_add_messages_attachments_bucket.sql`
+
+### Meta App Webhook Setup
+
+1. In Meta App Dashboard, add Webhook product.
+2. Callback URL:
+    - `https://your-domain.com/.netlify/functions/meta-webhook`
+3. Verify Token:
+    - same value as `META_WEBHOOK_VERIFY_TOKEN`
+4. Subscribe to fields:
+    - Facebook Page: `messages`, `messaging_postbacks`
+    - Instagram: `messages`
+
+### How Linking Works
+
+- Incoming sender IDs are stored/used as:
+  - `contact_identities.type = 'facebook'` or `'instagram'`
+  - `contact_identities.value = sender_id`
+- If a matching identity exists, the conversation auto-links to that `client_id`.
+
+### Quick Test (Inbound)
+
+1. Ensure at least one active row exists in `social_integrations` with:
+    - `platform` = `facebook` or `instagram`
+    - `page_id`
+    - `access_token`
+2. Send a message from a personal test account to your Page/IG business inbox.
+3. Confirm records are created in:
+    - `conversations`
+    - `conversation_participants`
+    - `conversation_messages`
+
+### Quick Test (Outbound)
+
+Call:
+
+```bash
+curl -X POST https://your-domain.com/.netlify/functions/send-social \
+  -H "Content-Type: application/json" \
+  -d '{
+     "platform": "facebook",
+     "recipientId": "<SENDER_PSID>",
+     "text": "Hello from OMD",
+     "conversationId": "<OPTIONAL_CONVERSATION_UUID>"
+  }'
+```
+
+If successful, response includes `message_id` and the outbound message is saved to `conversation_messages`.
