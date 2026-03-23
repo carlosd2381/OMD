@@ -63,6 +63,8 @@ export const emailService = {
         payload?.connection?.host ? `host=${payload.connection.host}` : null,
         payload?.connection?.port ? `port=${payload.connection.port}` : null,
         typeof payload?.connection?.secure === 'boolean' ? `secure=${payload.connection.secure}` : null,
+        payload?.diagnostics?.dns?.ok === false ? `dns=${payload.diagnostics.dns.code || payload.diagnostics.dns.error}` : null,
+        payload?.diagnostics?.tcp?.ok === false ? `tcp=${payload.diagnostics.tcp.code || payload.diagnostics.tcp.error}` : null,
       ]
         .filter(Boolean)
         .map(String);

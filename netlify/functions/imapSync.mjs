@@ -1,6 +1,8 @@
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { createClient } from '@supabase/supabase-js';
+import dns from 'node:dns/promises';
+import net from 'node:net';
 
 export const config = {
   schedule: '*/10 * * * *',
@@ -54,6 +56,56 @@ const normalizeImapError = (error) => {
   return details;
 };
 
+const resolveHostDiagnostics = async (host) => {
+  try {
+    const addresses = await dns.lookup(host, { all: true });
+    return {
+      ok: true,
+      addresses,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      code: error?.code || null,
+    };
+  }
+};
+
+const tcpProbe = async (host, port, timeoutMs = 7000) => {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let settled = false;
+
+    const finalize = (result) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(result);
+    };
+
+    socket.setTimeout(timeoutMs);
+
+    socket.on('connect', () => {
+      finalize({ ok: true });
+    });
+
+    socket.on('timeout', () => {
+      finalize({ ok: false, code: 'ETIMEDOUT', error: `TCP timeout after ${timeoutMs}ms` });
+    });
+
+    socket.on('error', (error) => {
+      finalize({
+        ok: false,
+        code: error?.code || null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+    socket.connect(port, host);
+  });
+};
+
 const supabaseAdmin = () =>
   createClient(requiredEnv('SUPABASE_URL'), requiredEnv('SUPABASE_SERVICE_ROLE_KEY'), {
     auth: { persistSession: false },
@@ -63,6 +115,8 @@ export const handler = async () => {
   let host = null;
   let port = null;
   let secure = null;
+  let reachability = null;
+  let dnsInfo = null;
 
   try {
     host = firstAvailableEnv(['IMAP_HOST', 'ZOHO_IMAP_HOST']);
@@ -77,6 +131,9 @@ export const handler = async () => {
     const secureDefault = port === 993;
     secure = parseBooleanEnv(process.env.IMAP_SECURE, secureDefault);
     const rejectUnauthorized = parseBooleanEnv(process.env.IMAP_TLS_REJECT_UNAUTHORIZED, true);
+
+    dnsInfo = await resolveHostDiagnostics(host);
+    reachability = await tcpProbe(host, port);
 
     const imap = new ImapFlow({
       host,
@@ -157,6 +214,10 @@ export const handler = async () => {
           host,
           port,
           secure,
+        },
+        diagnostics: {
+          dns: dnsInfo,
+          tcp: reachability,
         },
       }),
     };
