@@ -14,34 +14,52 @@ const requiredEnv = (key) => {
   return value;
 };
 
+const firstAvailableEnv = (keys) => {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value) return value;
+  }
+  throw new Error(`Missing one of required env vars: ${keys.join(', ')}`);
+};
+
 const supabaseAdmin = () =>
   createClient(requiredEnv('SUPABASE_URL'), requiredEnv('SUPABASE_SERVICE_ROLE_KEY'), {
     auth: { persistSession: false },
   });
 
 export const handler = async () => {
-  const host = requiredEnv('ZOHO_IMAP_HOST');
-  const port = Number(requiredEnv('ZOHO_IMAP_PORT'));
-  const user = requiredEnv('ZOHO_IMAP_USER');
-  const pass = requiredEnv('ZOHO_IMAP_PASS');
-
-  const imap = new ImapFlow({
-    host,
-    port,
-    secure: true,
-    auth: { user, pass },
-  });
-
-  await imap.connect();
-  const supabase = supabaseAdmin();
-
   try {
+    const host = firstAvailableEnv(['IMAP_HOST', 'ZOHO_IMAP_HOST']);
+    const portRaw = firstAvailableEnv(['IMAP_PORT', 'ZOHO_IMAP_PORT']);
+    const port = Number(portRaw);
+    if (!Number.isFinite(port) || port <= 0) {
+      throw new Error(`Invalid IMAP port: ${portRaw}`);
+    }
+
+    const user = firstAvailableEnv(['IMAP_USER', 'ZOHO_IMAP_USER']);
+    const pass = firstAvailableEnv(['IMAP_PASS', 'ZOHO_IMAP_PASS']);
+    const secureRaw = process.env.IMAP_SECURE;
+    const secure = typeof secureRaw === 'string'
+      ? ['1', 'true', 'yes', 'on'].includes(secureRaw.toLowerCase())
+      : true;
+
+    const imap = new ImapFlow({
+      host,
+      port,
+      secure,
+      auth: { user, pass },
+    });
+
+    await imap.connect();
+    const supabase = supabaseAdmin();
+
     const lock = await imap.getMailboxLock('INBOX');
     try {
       const unseen = await imap.search({ seen: false });
       if (!unseen.length) {
         return {
           statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ok: true, synced: 0 }),
         };
       }
@@ -68,7 +86,7 @@ export const handler = async () => {
             received_at: new Date().toISOString(),
             text_body: textBody,
             html_body: htmlBody,
-            source: 'zoho',
+            source: process.env.IMAP_SOURCE || 'imap',
             status: 'unread',
           },
           { onConflict: 'message_id' }
@@ -80,13 +98,22 @@ export const handler = async () => {
       }
     } finally {
       lock.release();
+      await imap.logout();
     }
-  } finally {
-    await imap.logout();
-  }
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ ok: true }),
-  };
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true }),
+    };
+  } catch (error) {
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    };
+  }
 };
