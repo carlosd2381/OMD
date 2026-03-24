@@ -42,12 +42,17 @@ const formatEnvelopeAddress = (addressList = []) =>
   addressList
     .map((entry) => {
       if (!entry) return null;
-      const mailbox = entry.mailbox || '';
-      const host = entry.host || '';
-      const email = mailbox && host ? `${mailbox}@${host}` : mailbox || host || '';
-      if (!email) return null;
-      if (entry.name) return `${entry.name} <${email}>`;
-      return email;
+      const directAddress = typeof entry.address === 'string' ? entry.address.trim() : '';
+      const mailbox = typeof entry.mailbox === 'string' ? entry.mailbox.trim() : '';
+      const host = typeof entry.host === 'string' ? entry.host.trim() : '';
+      const combinedAddress = mailbox && host ? `${mailbox}@${host}` : '';
+      const email = directAddress || combinedAddress || mailbox || host || '';
+      const displayName = typeof entry.name === 'string' ? entry.name.trim() : '';
+
+      if (email && displayName) return `${displayName} <${email}>`;
+      if (email) return email;
+      if (displayName) return displayName;
+      return null;
     })
     .filter(Boolean)
     .join(', ');
