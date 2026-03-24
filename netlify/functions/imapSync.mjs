@@ -32,6 +32,26 @@ const parseBooleanEnv = (value, fallback) => {
   return fallback;
 };
 
+const parseFetchMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'full') return 'full';
+  return 'metadata';
+};
+
+const formatEnvelopeAddress = (addressList = []) =>
+  addressList
+    .map((entry) => {
+      if (!entry) return null;
+      const mailbox = entry.mailbox || '';
+      const host = entry.host || '';
+      const email = mailbox && host ? `${mailbox}@${host}` : mailbox || host || '';
+      if (!email) return null;
+      if (entry.name) return `${entry.name} <${email}>`;
+      return email;
+    })
+    .filter(Boolean)
+    .join(', ');
+
 const parsePositiveIntEnv = (value, fallback) => {
   if (typeof value !== 'string' || !value.trim()) return fallback;
   const parsed = Number.parseInt(value, 10);
@@ -148,6 +168,7 @@ export const handler = async () => {
     const rejectUnauthorized = parseBooleanEnv(process.env.IMAP_TLS_REJECT_UNAUTHORIZED, true);
     const maxMessagesPerRun = parsePositiveIntEnv(process.env.IMAP_MAX_MESSAGES_PER_RUN, 50);
     const fetchBatchSize = parsePositiveIntEnv(process.env.IMAP_FETCH_BATCH_SIZE, 20);
+    const fetchMode = parseFetchMode(process.env.IMAP_FETCH_MODE);
 
     dnsInfo = await resolveHostDiagnostics(host);
     reachability = await tcpProbe(host, port);
@@ -183,16 +204,41 @@ export const handler = async () => {
       const writeErrors = [];
 
       for (const batch of batches) {
-        for await (const msg of imap.fetch(batch, { uid: true, source: true })) {
-          const parsed = await simpleParser(msg.source);
-          const messageId = parsed.messageId || `imap-${msg.uid}`;
-          const fromAddress = parsed.from?.text || '';
-          const toAddress = parsed.to?.text || '';
-          const ccAddress = parsed.cc?.text || null;
-          const subject = parsed.subject || '';
-          const sentAt = parsed.date ? parsed.date.toISOString() : null;
-          const textBody = parsed.text || null;
-          const htmlBody = typeof parsed.html === 'string' ? parsed.html : null;
+        const fetchQuery = fetchMode === 'full' ? { uid: true, envelope: true, source: true } : { uid: true, envelope: true };
+        for await (const msg of imap.fetch(batch, fetchQuery)) {
+          let messageId = msg.envelope?.messageId || `imap-${msg.uid}`;
+          let fromAddress = formatEnvelopeAddress(msg.envelope?.from);
+          let toAddress = formatEnvelopeAddress(msg.envelope?.to);
+          let ccAddress = formatEnvelopeAddress(msg.envelope?.cc) || null;
+          let subject = msg.envelope?.subject || '';
+          let sentAt = msg.envelope?.date ? msg.envelope.date.toISOString() : null;
+          let textBody = null;
+          let htmlBody = null;
+
+          if (fetchMode === 'full' && msg.source) {
+            try {
+              const parsed = await simpleParser(msg.source);
+              messageId = parsed.messageId || messageId;
+              fromAddress = parsed.from?.text || fromAddress;
+              toAddress = parsed.to?.text || toAddress;
+              ccAddress = parsed.cc?.text || ccAddress;
+              subject = parsed.subject || subject;
+              sentAt = parsed.date ? parsed.date.toISOString() : sentAt;
+              textBody = parsed.text || null;
+              htmlBody = typeof parsed.html === 'string' ? parsed.html : null;
+            } catch (parseError) {
+              writeErrors.push({
+                uid: msg.uid,
+                step: 'parse',
+                message: parseError instanceof Error ? parseError.message : String(parseError),
+                details: null,
+              });
+            }
+          }
+
+          if (!messageId) {
+            messageId = `imap-${msg.uid}`;
+          }
 
           const row = {
             message_id: messageId,
