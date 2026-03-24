@@ -36,6 +36,8 @@ export interface InboxSyncResult {
   synced?: number;
   processed?: number;
   remaining?: number;
+  failed?: number;
+  writeErrors?: Array<{ uid?: number; step?: string; message?: string; details?: string | null }>;
 }
 
 const fileToBase64 = (file: File): Promise<string> =>
@@ -84,6 +86,8 @@ export const emailService = {
       synced: typeof payload?.synced === 'number' ? payload.synced : undefined,
       processed: typeof payload?.processed === 'number' ? payload.processed : undefined,
       remaining: typeof payload?.remaining === 'number' ? payload.remaining : undefined,
+      failed: typeof payload?.failed === 'number' ? payload.failed : undefined,
+      writeErrors: Array.isArray(payload?.writeErrors) ? payload.writeErrors : undefined,
     };
   },
 

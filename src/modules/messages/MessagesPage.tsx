@@ -66,6 +66,12 @@ export default function MessagesPage() {
         const remainingText = typeof syncResult.remaining === 'number' ? `, ${syncResult.remaining} remaining` : '';
         toast.success(`Inbox synced (${syncResult.synced} new${remainingText})`);
       }
+
+      if ((syncResult.failed || 0) > 0) {
+        const firstError = syncResult.writeErrors?.[0];
+        const errorText = firstError?.message || 'One or more messages failed to save';
+        toast.error(`Sync saved=${syncResult.synced || 0}, failed=${syncResult.failed}. ${errorText}`);
+      }
     } catch (error) {
       console.error('Inbox sync failed, loading cached data', error);
       toast.error(error instanceof Error ? error.message : 'Inbox sync failed');
