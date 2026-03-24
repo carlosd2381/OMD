@@ -136,11 +136,19 @@ export const handler = async (event) => {
       if (!externalMessageId) continue;
 
       try {
-        let searchResult = await imap.search([['HEADER', 'Message-ID', externalMessageId]]);
+        let searchResult = await imap.search({
+          header: {
+            'Message-ID': externalMessageId,
+          },
+        });
 
         if (!searchResult.length) {
           const fallbackId = externalMessageId.replace(/^<|>$/g, '');
-          searchResult = await imap.search([['HEADER', 'Message-ID', fallbackId]]);
+          searchResult = await imap.search({
+            header: {
+              'Message-ID': fallbackId,
+            },
+          });
         }
 
         if (!searchResult.length) {
