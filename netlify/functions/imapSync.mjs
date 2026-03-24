@@ -179,6 +179,8 @@ export const handler = async () => {
       const unseenToSync = unseen.slice(-maxMessagesPerRun);
       const batches = chunkArray(unseenToSync, fetchBatchSize);
       let syncedCount = 0;
+      let failedCount = 0;
+      const writeErrors = [];
 
       for (const batch of batches) {
         for await (const msg of imap.fetch(batch, { uid: true, source: true })) {
@@ -192,26 +194,92 @@ export const handler = async () => {
           const textBody = parsed.text || null;
           const htmlBody = typeof parsed.html === 'string' ? parsed.html : null;
 
-          const { error } = await supabase.from('inbox_emails').upsert(
-            {
-              message_id: messageId,
-              from_address: fromAddress,
-              to_address: toAddress,
-              cc_address: ccAddress,
-              subject,
-              sent_at: sentAt,
-              received_at: new Date().toISOString(),
-              text_body: textBody,
-              html_body: htmlBody,
-              source: process.env.IMAP_SOURCE || 'imap',
-              status: 'unread',
-            },
-            { onConflict: 'message_id' }
-          );
+          const row = {
+            message_id: messageId,
+            from_address: fromAddress,
+            to_address: toAddress,
+            cc_address: ccAddress,
+            subject,
+            sent_at: sentAt,
+            received_at: new Date().toISOString(),
+            text_body: textBody,
+            html_body: htmlBody,
+            source: process.env.IMAP_SOURCE || 'imap',
+            status: 'unread',
+          };
+
+          let persisted = false;
+          const { error } = await supabase.from('inbox_emails').upsert(row, { onConflict: 'message_id' });
 
           if (!error) {
+            persisted = true;
+          } else {
+            const message = (error.message || '').toLowerCase();
+            const hasMissingConflictConstraint =
+              message.includes('no unique or exclusion constraint matching the on conflict specification') ||
+              message.includes('there is no unique or exclusion constraint matching the on conflict specification');
+
+            if (hasMissingConflictConstraint) {
+              const { data: existingRow, error: findError } = await supabase
+                .from('inbox_emails')
+                .select('id')
+                .eq('message_id', messageId)
+                .limit(1)
+                .maybeSingle();
+
+              if (!findError) {
+                if (existingRow?.id) {
+                  const { error: updateError } = await supabase
+                    .from('inbox_emails')
+                    .update(row)
+                    .eq('id', existingRow.id);
+
+                  if (!updateError) {
+                    persisted = true;
+                  } else {
+                    writeErrors.push({
+                      uid: msg.uid,
+                      step: 'update-fallback',
+                      message: updateError.message,
+                      details: updateError.details || null,
+                    });
+                  }
+                } else {
+                  const { error: insertError } = await supabase.from('inbox_emails').insert(row);
+                  if (!insertError) {
+                    persisted = true;
+                  } else {
+                    writeErrors.push({
+                      uid: msg.uid,
+                      step: 'insert-fallback',
+                      message: insertError.message,
+                      details: insertError.details || null,
+                    });
+                  }
+                }
+              } else {
+                writeErrors.push({
+                  uid: msg.uid,
+                  step: 'find-fallback',
+                  message: findError.message,
+                  details: findError.details || null,
+                });
+              }
+            } else {
+              writeErrors.push({
+                uid: msg.uid,
+                step: 'upsert',
+                message: error.message,
+                details: error.details || null,
+              });
+            }
+          }
+
+          if (persisted) {
             syncedCount += 1;
             await imap.messageFlagsAdd(msg.uid, ['\\Seen']);
+          } else {
+            failedCount += 1;
           }
         }
       }
@@ -225,6 +293,8 @@ export const handler = async () => {
           synced: syncedCount,
           processed: unseenToSync.length,
           remaining,
+          failed: failedCount,
+          writeErrors: writeErrors.slice(0, 5),
         }),
       };
     } finally {
