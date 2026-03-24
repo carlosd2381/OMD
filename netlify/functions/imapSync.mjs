@@ -166,9 +166,12 @@ export const handler = async () => {
     const secureDefault = port === 993;
     secure = parseBooleanEnv(process.env.IMAP_SECURE, secureDefault);
     const rejectUnauthorized = parseBooleanEnv(process.env.IMAP_TLS_REJECT_UNAUTHORIZED, true);
-    const maxMessagesPerRun = parsePositiveIntEnv(process.env.IMAP_MAX_MESSAGES_PER_RUN, 50);
-    const fetchBatchSize = parsePositiveIntEnv(process.env.IMAP_FETCH_BATCH_SIZE, 20);
-    const fetchMode = parseFetchMode(process.env.IMAP_FETCH_MODE);
+    const maxMessagesPerRun = parsePositiveIntEnv(process.env.IMAP_MAX_MESSAGES_PER_RUN, 10);
+    const fetchBatchSize = parsePositiveIntEnv(process.env.IMAP_FETCH_BATCH_SIZE, 5);
+    const maxRuntimeMs = parsePositiveIntEnv(process.env.IMAP_MAX_RUNTIME_MS, 24000);
+    const startedAt = Date.now();
+    const allowFullFetch = parseBooleanEnv(process.env.IMAP_ENABLE_FULL_FETCH, false);
+    const fetchMode = allowFullFetch ? parseFetchMode(process.env.IMAP_FETCH_MODE) : 'metadata';
 
     dnsInfo = await resolveHostDiagnostics(host);
     reachability = await tcpProbe(host, port);
@@ -203,9 +206,21 @@ export const handler = async () => {
       let failedCount = 0;
       const writeErrors = [];
 
+      let stoppedEarly = false;
       for (const batch of batches) {
+        if (Date.now() - startedAt >= maxRuntimeMs) {
+          stoppedEarly = true;
+          break;
+        }
+
+        const seenUids = [];
         const fetchQuery = fetchMode === 'full' ? { uid: true, envelope: true, source: true } : { uid: true, envelope: true };
         for await (const msg of imap.fetch(batch, fetchQuery)) {
+          if (Date.now() - startedAt >= maxRuntimeMs) {
+            stoppedEarly = true;
+            break;
+          }
+
           let messageId = msg.envelope?.messageId || `imap-${msg.uid}`;
           let fromAddress = formatEnvelopeAddress(msg.envelope?.from);
           let toAddress = formatEnvelopeAddress(msg.envelope?.to);
@@ -323,10 +338,18 @@ export const handler = async () => {
 
           if (persisted) {
             syncedCount += 1;
-            await imap.messageFlagsAdd(msg.uid, ['\\Seen']);
+            seenUids.push(msg.uid);
           } else {
             failedCount += 1;
           }
+        }
+
+        if (seenUids.length) {
+          await imap.messageFlagsAdd(seenUids, ['\\Seen']);
+        }
+
+        if (stoppedEarly) {
+          break;
         }
       }
 
@@ -340,6 +363,9 @@ export const handler = async () => {
           processed: unseenToSync.length,
           remaining,
           failed: failedCount,
+          fetchMode,
+          stoppedEarly,
+          runtimeMs: Date.now() - startedAt,
           writeErrors: writeErrors.slice(0, 5),
         }),
       };
