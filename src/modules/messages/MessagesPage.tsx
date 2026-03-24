@@ -83,11 +83,29 @@ export default function MessagesPage() {
   const handleSelectThread = async (thread: ConversationThread) => {
     try {
       const detailed = await conversationService.getConversationThread(thread.conversation.id);
-      if (detailed) {
-        setSelectedThread(detailed);
-      } else {
-        setSelectedThread(thread);
+      let nextThread = detailed || thread;
+
+      if (nextThread.conversation.channel === 'email') {
+        const hasMissingBody = nextThread.messages.some(
+          (message) =>
+            message.direction === 'inbound' &&
+            !message.body_text &&
+            !message.body_html &&
+            Boolean(message.external_message_id)
+        );
+
+        if (hasMissingBody) {
+          const hydrateResult = await conversationService.hydrateConversationEmailBodies(nextThread.conversation.id, 3);
+          if (hydrateResult.hydrated > 0) {
+            const refreshedThread = await conversationService.getConversationThread(nextThread.conversation.id);
+            if (refreshedThread) {
+              nextThread = refreshedThread;
+            }
+          }
+        }
       }
+
+      setSelectedThread(nextThread);
 
       if ((thread.conversation.unread_count || 0) > 0) {
         await conversationService.markConversationRead(thread.conversation.id);

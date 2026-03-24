@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import type { Conversation, ConversationMessage, ContactIdentity, MessageAttachment } from '../types/conversation';
 
 const db = supabase as any;
+const LOAD_EMAIL_BODY_ENDPOINT = '/.netlify/functions/loadEmailBody';
 
 export interface ConversationParticipant {
   id: string;
@@ -23,6 +24,13 @@ export interface OutboundAttachmentMetadata {
   filename: string;
   mime_type?: string | null;
   size_bytes?: number | null;
+}
+
+export interface HydrateEmailBodiesResult {
+  ok: boolean;
+  hydrated: number;
+  checked: number;
+  errors?: Array<{ message_id?: string; reason?: string; detail?: string }>;
 }
 
 const byDateAsc = (a: { sent_at: string }, b: { sent_at: string }) =>
@@ -250,5 +258,26 @@ export const conversationService = {
 
     if (error) throw error;
     return data as ContactIdentity;
+  },
+
+  async hydrateConversationEmailBodies(conversationId: string, limit = 3): Promise<HydrateEmailBodiesResult> {
+    const response = await fetch(LOAD_EMAIL_BODY_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId, limit }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(payload?.error || 'Failed to load full email content');
+    }
+
+    return {
+      ok: Boolean(payload?.ok ?? true),
+      hydrated: typeof payload?.hydrated === 'number' ? payload.hydrated : 0,
+      checked: typeof payload?.checked === 'number' ? payload.checked : 0,
+      errors: Array.isArray(payload?.errors) ? payload.errors : undefined,
+    };
   },
 };
