@@ -7,12 +7,20 @@ import UnifiedMessageList from './UnifiedMessageList';
 import UnifiedMessageDetail from './UnifiedMessageDetail';
 import toast from 'react-hot-toast';
 
+interface SyncStatus {
+  synced: number;
+  processed: number;
+  remaining: number;
+  timestamp: string;
+}
+
 export default function MessagesPage() {
   const [threads, setThreads] = useState<ConversationThread[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedThread, setSelectedThread] = useState<ConversationThread | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
 
   useEffect(() => {
     loadConversations();
@@ -41,8 +49,22 @@ export default function MessagesPage() {
     setRefreshing(true);
     try {
       const syncResult = await emailService.syncInbox();
+      if (
+        typeof syncResult.synced === 'number' &&
+        typeof syncResult.processed === 'number' &&
+        typeof syncResult.remaining === 'number'
+      ) {
+        setSyncStatus({
+          synced: syncResult.synced,
+          processed: syncResult.processed,
+          remaining: syncResult.remaining,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       if (typeof syncResult.synced === 'number') {
-        toast.success(`Inbox synced (${syncResult.synced} new)`);
+        const remainingText = typeof syncResult.remaining === 'number' ? `, ${syncResult.remaining} remaining` : '';
+        toast.success(`Inbox synced (${syncResult.synced} new${remainingText})`);
       }
     } catch (error) {
       console.error('Inbox sync failed, loading cached data', error);
@@ -212,6 +234,12 @@ export default function MessagesPage() {
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-gray-50 dark:bg-gray-700 placeholder-gray-500 focus:outline-none focus:bg-white dark:focus:bg-gray-600 focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
              />
            </div>
+
+           {syncStatus ? (
+             <p className="text-xs text-gray-500 dark:text-gray-400">
+               Last sync: {syncStatus.synced} saved of {syncStatus.processed} processed, {syncStatus.remaining} remaining
+             </p>
+           ) : null}
         </div>
 
         {/* List */}

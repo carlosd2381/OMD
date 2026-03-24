@@ -32,6 +32,21 @@ const parseBooleanEnv = (value, fallback) => {
   return fallback;
 };
 
+const parsePositiveIntEnv = (value, fallback) => {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+};
+
+const chunkArray = (values, size) => {
+  const chunks = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+};
+
 const normalizeImapError = (error) => {
   if (!(error instanceof Error)) {
     return { message: String(error) };
@@ -131,6 +146,8 @@ export const handler = async () => {
     const secureDefault = port === 993;
     secure = parseBooleanEnv(process.env.IMAP_SECURE, secureDefault);
     const rejectUnauthorized = parseBooleanEnv(process.env.IMAP_TLS_REJECT_UNAUTHORIZED, true);
+    const maxMessagesPerRun = parsePositiveIntEnv(process.env.IMAP_MAX_MESSAGES_PER_RUN, 50);
+    const fetchBatchSize = parsePositiveIntEnv(process.env.IMAP_FETCH_BATCH_SIZE, 20);
 
     dnsInfo = await resolveHostDiagnostics(host);
     reachability = await tcpProbe(host, port);
@@ -159,48 +176,61 @@ export const handler = async () => {
         };
       }
 
-      for await (const msg of imap.fetch(unseen, { uid: true, source: true })) {
-        const parsed = await simpleParser(msg.source);
-        const messageId = parsed.messageId || `imap-${msg.uid}`;
-        const fromAddress = parsed.from?.text || '';
-        const toAddress = parsed.to?.text || '';
-        const ccAddress = parsed.cc?.text || null;
-        const subject = parsed.subject || '';
-        const sentAt = parsed.date ? parsed.date.toISOString() : null;
-        const textBody = parsed.text || null;
-        const htmlBody = typeof parsed.html === 'string' ? parsed.html : null;
+      const unseenToSync = unseen.slice(-maxMessagesPerRun);
+      const batches = chunkArray(unseenToSync, fetchBatchSize);
+      let syncedCount = 0;
 
-        const { error } = await supabase.from('inbox_emails').upsert(
-          {
-            message_id: messageId,
-            from_address: fromAddress,
-            to_address: toAddress,
-            cc_address: ccAddress,
-            subject,
-            sent_at: sentAt,
-            received_at: new Date().toISOString(),
-            text_body: textBody,
-            html_body: htmlBody,
-            source: process.env.IMAP_SOURCE || 'imap',
-            status: 'unread',
-          },
-          { onConflict: 'message_id' }
-        );
+      for (const batch of batches) {
+        for await (const msg of imap.fetch(batch, { uid: true, source: true })) {
+          const parsed = await simpleParser(msg.source);
+          const messageId = parsed.messageId || `imap-${msg.uid}`;
+          const fromAddress = parsed.from?.text || '';
+          const toAddress = parsed.to?.text || '';
+          const ccAddress = parsed.cc?.text || null;
+          const subject = parsed.subject || '';
+          const sentAt = parsed.date ? parsed.date.toISOString() : null;
+          const textBody = parsed.text || null;
+          const htmlBody = typeof parsed.html === 'string' ? parsed.html : null;
 
-        if (!error) {
-          await imap.messageFlagsAdd(msg.uid, ['\\Seen']);
+          const { error } = await supabase.from('inbox_emails').upsert(
+            {
+              message_id: messageId,
+              from_address: fromAddress,
+              to_address: toAddress,
+              cc_address: ccAddress,
+              subject,
+              sent_at: sentAt,
+              received_at: new Date().toISOString(),
+              text_body: textBody,
+              html_body: htmlBody,
+              source: process.env.IMAP_SOURCE || 'imap',
+              status: 'unread',
+            },
+            { onConflict: 'message_id' }
+          );
+
+          if (!error) {
+            syncedCount += 1;
+            await imap.messageFlagsAdd(msg.uid, ['\\Seen']);
+          }
         }
       }
+
+      const remaining = Math.max(unseen.length - unseenToSync.length, 0);
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ok: true,
+          synced: syncedCount,
+          processed: unseenToSync.length,
+          remaining,
+        }),
+      };
     } finally {
       lock.release();
       await imap.logout();
     }
-
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: true }),
-    };
   } catch (error) {
     const normalized = normalizeImapError(error);
     return {

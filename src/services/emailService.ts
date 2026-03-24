@@ -31,6 +31,13 @@ export interface SendEmailResult {
   message_id?: string | null;
 }
 
+export interface InboxSyncResult {
+  ok: boolean;
+  synced?: number;
+  processed?: number;
+  remaining?: number;
+}
+
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -46,7 +53,7 @@ const fileToBase64 = (file: File): Promise<string> =>
 const toHtml = (text?: string) => (text || '').replace(/\n/g, '<br/>');
 
 export const emailService = {
-  async syncInbox(): Promise<{ ok: boolean; synced?: number }> {
+  async syncInbox(): Promise<InboxSyncResult> {
     const response = await fetch(IMAP_SYNC_ENDPOINT, {
       method: 'POST',
     });
@@ -75,6 +82,8 @@ export const emailService = {
     return {
       ok: Boolean(payload?.ok ?? true),
       synced: typeof payload?.synced === 'number' ? payload.synced : undefined,
+      processed: typeof payload?.processed === 'number' ? payload.processed : undefined,
+      remaining: typeof payload?.remaining === 'number' ? payload.remaining : undefined,
     };
   },
 
