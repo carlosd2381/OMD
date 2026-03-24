@@ -86,13 +86,9 @@ export default function MessagesPage() {
       let nextThread = detailed || thread;
 
       if (nextThread.conversation.channel === 'email') {
-        const hasMissingBody = nextThread.messages.some(
-          (message) =>
-            message.direction === 'inbound' &&
-            !message.body_text &&
-            !message.body_html &&
-            Boolean(message.external_message_id)
-        );
+          const hasMissingBody = nextThread.messages.some(
+            (msg) => msg.direction === 'inbound' && !getBodyContent(msg).trim(),
+          );
 
         if (hasMissingBody) {
           const hydrateResult = await conversationService.hydrateConversationEmailBodies(nextThread.conversation.id, 3);

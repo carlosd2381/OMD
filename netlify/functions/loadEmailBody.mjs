@@ -65,6 +65,8 @@ export const handler = async (event) => {
       return jsonResponse(400, { ok: false, error: 'conversationId is required' });
     }
 
+    console.log('[loadEmailBody] start', { conversationId, limit });
+
     const supabase = supabaseAdmin();
 
     const { data: conversation, error: conversationError } = await supabase
@@ -78,20 +80,27 @@ export const handler = async (event) => {
       return jsonResponse(400, { ok: false, error: 'Conversation is not an email thread' });
     }
 
-    const { data: candidateMessages, error: messageError } = await supabase
+    const { data: rawMessages, error: messageError } = await supabase
       .from('conversation_messages')
       .select('id, external_message_id, direction, body_text, body_html')
       .eq('conversation_id', conversationId)
       .eq('direction', 'inbound')
-      .is('body_text', null)
-      .is('body_html', null)
-      .not('external_message_id', 'is', null)
       .order('sent_at', { ascending: false })
-      .limit(limit);
+      .limit(50);
 
     if (messageError) throw messageError;
 
-    if (!candidateMessages?.length) {
+    const candidateMessages = (rawMessages || [])
+      .filter((message) => {
+        const bodyText = String(message.body_text || '').trim();
+        const bodyHtml = String(message.body_html || '').trim();
+        const externalMessageId = String(message.external_message_id || '').trim();
+        return !bodyText && !bodyHtml && Boolean(externalMessageId);
+      })
+      .slice(0, limit);
+
+    if (!candidateMessages.length) {
+      console.log('[loadEmailBody] no candidates', { conversationId, scanned: (rawMessages || []).length });
       return jsonResponse(200, { ok: true, hydrated: 0, checked: 0 });
     }
 
@@ -127,17 +136,29 @@ export const handler = async (event) => {
       if (!externalMessageId) continue;
 
       try {
-        let searchResult = await imap.search({ header: ['Message-ID', externalMessageId] });
+        let searchResult = await imap.search([['HEADER', 'Message-ID', externalMessageId]]);
 
         if (!searchResult.length) {
           const fallbackId = externalMessageId.replace(/^<|>$/g, '');
-          searchResult = await imap.search({ header: ['Message-ID', fallbackId] });
+          searchResult = await imap.search([['HEADER', 'Message-ID', fallbackId]]);
         }
 
         if (!searchResult.length) {
+          console.log('[loadEmailBody] message not found in IMAP', {
+            conversationId,
+            messageId: message.id,
+            externalMessageId,
+          });
           errors.push({ message_id: message.id, reason: 'not-found' });
           continue;
         }
+
+        console.log('[loadEmailBody] message matched in IMAP', {
+          conversationId,
+          messageId: message.id,
+          externalMessageId,
+          matches: searchResult.length,
+        });
 
         const targetSeq = searchResult[searchResult.length - 1];
         let parsed = null;
@@ -155,6 +176,7 @@ export const handler = async (event) => {
         const htmlBody = typeof parsed?.html === 'string' ? parsed.html : null;
 
         if (!textBody && !htmlBody) {
+          console.log('[loadEmailBody] parsed empty body', { conversationId, messageId: message.id, externalMessageId });
           errors.push({ message_id: message.id, reason: 'empty-body' });
           continue;
         }
@@ -175,6 +197,9 @@ export const handler = async (event) => {
 
         if (updateConversationMessageError) throw updateConversationMessageError;
 
+        const externalMessageIdBare = externalMessageId.replace(/^<|>$/g, '');
+        const externalMessageIds = Array.from(new Set([externalMessageId, externalMessageIdBare].filter(Boolean)));
+
         const { error: updateInboxEmailError } = await supabase
           .from('inbox_emails')
           .update({
@@ -186,7 +211,7 @@ export const handler = async (event) => {
             cc_address: ccAddress,
             subject,
           })
-          .eq('message_id', externalMessageId);
+          .in('message_id', externalMessageIds);
 
         if (updateInboxEmailError) {
           errors.push({ message_id: message.id, reason: 'inbox-update-failed', detail: updateInboxEmailError.message });
@@ -201,6 +226,8 @@ export const handler = async (event) => {
         });
       }
     }
+
+    console.log('[loadEmailBody] completed', { conversationId, hydrated, checked: candidateMessages.length, errors: errors.length });
 
     return jsonResponse(200, {
       ok: true,
