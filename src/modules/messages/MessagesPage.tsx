@@ -14,6 +14,16 @@ interface SyncStatus {
   timestamp: string;
 }
 
+const getBodyContent = (message: ConversationThread['messages'][number]) => {
+  const text = String(message.body_text || '').trim();
+  if (text) return text;
+
+  const html = String(message.body_html || '').trim();
+  if (!html) return '';
+
+  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+};
+
 export default function MessagesPage() {
   const [threads, setThreads] = useState<ConversationThread[]>([]);
   const [loading, setLoading] = useState(true);
