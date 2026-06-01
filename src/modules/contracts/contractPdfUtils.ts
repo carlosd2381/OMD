@@ -186,7 +186,10 @@ export function parseContractContentBlocks(html: string): ContractContentBlock[]
   return blocks.filter(block => {
     if (block.type === 'list') return block.items.length > 0;
     if (block.type === 'rich') return block.segments.length > 0;
-    return Boolean((block as any).text?.trim());
+    if (block.type === 'paragraph' || block.type === 'heading') {
+      return Boolean(block.text?.trim());
+    }
+    return false;
   });
 }
 

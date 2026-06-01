@@ -135,7 +135,7 @@ export default function TaskList() {
     <div className="space-y-6">
       <div className="sm:flex sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Tasks</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tasks</h1>
           <p className="mt-2 text-sm text-gray-700">
             Manage all tasks across clients, venues, and planners.
           </p>
@@ -151,7 +151,7 @@ export default function TaskList() {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 bg-white dark:bg-gray-800 dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 dark:border-gray-700">
+      <div className="flex flex-col sm:flex-row gap-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex-1 relative">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
             <Search className="h-5 w-5 text-gray-400" />
@@ -168,7 +168,7 @@ export default function TaskList() {
           <select
             className="rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-primary focus:outline-none focus:ring-primary sm:text-sm"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'pending' | 'completed')}
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
@@ -177,7 +177,7 @@ export default function TaskList() {
           <select
             className="rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-primary focus:outline-none focus:ring-primary sm:text-sm"
             value={assignmentFilter}
-            onChange={(e) => setAssignmentFilter(e.target.value as any)}
+            onChange={(e) => setAssignmentFilter(e.target.value as 'all' | 'me' | 'unassigned')}
           >
             <option value="all">All Assignments</option>
             <option value="me">Assigned to Me</option>
@@ -186,19 +186,19 @@ export default function TaskList() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
         <ul role="list" className="divide-y divide-gray-200">
           {filteredTasks.length === 0 ? (
             <li className="px-4 py-12 text-center">
               <CheckCircle className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white dark:text-white">No tasks found</h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Get started by creating a new task.</p>
+              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No tasks found</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Get started by creating a new task.</p>
             </li>
           ) : (
             filteredTasks.map((task) => (
               <li key={task.id}>
                 <div 
-                  className="block hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 cursor-pointer"
+                  className="block hover:bg-gray-50 dark:bg-gray-700 cursor-pointer"
                   onClick={() => handleEditTask(task)}
                 >
                   <div className="flex items-center px-4 py-4 sm:px-6">
@@ -207,7 +207,7 @@ export default function TaskList() {
                         <button
                           onClick={(e) => handleToggleStatus(task, e)}
                           className={`flex-shrink-0 ${
-                            task.status === 'completed' ? 'text-green-500' : 'text-gray-400 hover:text-gray-500 dark:text-gray-400 dark:text-gray-400'
+                            task.status === 'completed' ? 'text-green-500' : 'text-gray-400 hover:text-gray-500 dark:text-gray-400'
                           }`}
                         >
                           {task.status === 'completed' ? (
@@ -220,7 +220,7 @@ export default function TaskList() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between">
                           <p className={`text-sm font-medium truncate ${
-                            task.status === 'completed' ? 'text-gray-500 dark:text-gray-400 dark:text-gray-400 line-through' : 'text-primary'
+                            task.status === 'completed' ? 'text-gray-500 dark:text-gray-400 line-through' : 'text-primary'
                           }`}>
                             {task.title}
                           </p>
@@ -237,13 +237,13 @@ export default function TaskList() {
                         <div className="mt-2 flex justify-between">
                           <div className="sm:flex">
                             {task.due_date && (
-                              <p className="flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mr-6">
+                              <p className="flex items-center text-sm text-gray-500 dark:text-gray-400 mr-6">
                                 <Calendar className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
                                 {format(new Date(task.due_date), 'MMM d, yyyy')}
                               </p>
                             )}
                             {task.assigned_to && users[task.assigned_to] && (
-                              <p className="mt-2 flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:mt-0">
+                              <p className="mt-2 flex items-center text-sm text-gray-500 dark:text-gray-400 sm:mt-0">
                                 <UserIcon className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
                                 {users[task.assigned_to].name}
                               </p>

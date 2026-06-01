@@ -22,6 +22,8 @@ export interface Quote {
   id: string;
   client_id: string;
   event_id: string;
+  parent_quote_id?: string;
+  version: number;
   items: QuoteItem[];
   taxes?: QuoteTax[];
   

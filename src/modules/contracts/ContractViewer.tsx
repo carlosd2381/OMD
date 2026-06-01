@@ -10,6 +10,8 @@ import { quoteService } from '../../services/quoteService';
 import { settingsService, type BrandingSettings } from '../../services/settingsService';
 import { tokenService } from '../../services/tokenService';
 import { invoiceService } from '../../services/invoiceService';
+import { activityLogService, type DocumentNotificationStatus } from '../../services/activityLogService';
+import { NotificationStatus } from '../../components/NotificationStatus';
 import { formatDocumentID, formatPhoneNumber } from '../../utils/formatters';
 import { buildDocSequenceMap, buildEventSequenceMap, buildEventsMap, resolveDocumentId } from '../../utils/documentSequences';
 import { CONTRACT_HEADER_HTML } from '../../constants/contractTemplate';
@@ -44,6 +46,7 @@ export default function ContractViewer() {
   const [documentId, setDocumentId] = useState('');
   const [documentFingerprint, setDocumentFingerprint] = useState('');
   const [downloading, setDownloading] = useState(false);
+  const [notificationStatus, setNotificationStatus] = useState<DocumentNotificationStatus | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -70,6 +73,11 @@ export default function ContractViewer() {
         setClient(clientData);
         setEvent(eventData);
         setBranding(brandingData);
+
+        if (clientData?.id && contract.id) {
+          const statusData = await activityLogService.getLatestDocumentNotificationStatus(clientData.id, 'contract', contract.id);
+          setNotificationStatus(statusData);
+        }
 
         // Fetch Venue, Planner, Quote if event exists
         if (eventData) {
@@ -218,14 +226,14 @@ export default function ContractViewer() {
         </button>
       </div>
       
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg overflow-hidden p-10">
+      <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg overflow-hidden p-10">
         {/* PDF-Style Header */}
         <div className="flex justify-between items-start mb-10">
           <div>
-            <h2 className="text-3xl font-serif text-gray-900 dark:text-white dark:text-white uppercase tracking-widest mb-2">Contract</h2>
+            <h2 className="text-3xl font-serif text-gray-900 dark:text-white uppercase tracking-widest mb-2">Contract</h2>
             <div className="text-xs font-bold uppercase mb-1">{branding?.company_name || 'Oh My Desserts MX'}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{branding?.address || 'Priv. Palmilla, Jardines del Sur II, Benito Juarez, Quintana Roo, 77535'}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{branding?.website || 'www.ohmydessertsmx.com'} | {branding?.email || 'info@ohmydessertsmx.com'}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">{branding?.address || 'Priv. Palmilla, Jardines del Sur II, Benito Juarez, Quintana Roo, 77535'}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">{branding?.website || 'www.ohmydessertsmx.com'} | {branding?.email || 'info@ohmydessertsmx.com'}</div>
           </div>
           <div className="w-20 h-20 rounded-full bg-[#f5f0eb] flex items-center justify-center overflow-hidden">
             {branding?.logo_url ? (
@@ -239,29 +247,33 @@ export default function ContractViewer() {
         {/* Info Section */}
         <div className="flex justify-between mb-8">
           <div className="w-1/2">
-            <h4 className="text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase mb-2">Client</h4>
-            <div className="text-xs text-gray-900 dark:text-white dark:text-white">
+            <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase mb-2">Client</h4>
+            <div className="text-xs text-gray-900 dark:text-white">
               <p className="mb-1">{client?.first_name} {client?.last_name}</p>
-              <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">{client?.email}</p>
-              <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">{formatPhoneNumber(client?.phone)}</p>
+              <p className="text-gray-500 dark:text-gray-400 mb-1">{client?.email}</p>
+              <p className="text-gray-500 dark:text-gray-400">{formatPhoneNumber(client?.phone)}</p>
             </div>
           </div>
           <div className="w-1/2 pl-10">
             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Contract ID:</span>
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Contract ID:</span>
               <span className="text-xs text-right font-mono">
                 {documentId || formatDocumentID('CON', event?.date || contract.created_at)}
               </span>
             </div>
             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Date:</span>
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Date:</span>
               <span className="text-xs text-right">{new Date(contract.created_at).toLocaleDateString()}</span>
             </div>
             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Status:</span>
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Status:</span>
               <span className={`text-xs text-right font-bold ${
                 contract.status === 'signed' ? 'text-green-600' : 'text-yellow-600'
               }`}>{contract.status.toUpperCase()}</span>
+            </div>
+            <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Notification:</span>
+              <NotificationStatus status={notificationStatus} showDate />
             </div>
           </div>
         </div>
@@ -360,7 +372,7 @@ export default function ContractViewer() {
               <div className="border-b border-gray-900 mb-2 pb-2">
                 {branding?.company_name || 'Oh My Desserts MX'}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Service Provider Signature</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">Service Provider Signature</p>
             </div>
             
             <div className="w-5/12">
@@ -374,7 +386,7 @@ export default function ContractViewer() {
                 )}
               </div>
               <div className="flex justify-between">
-                <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Client Signature</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">Client Signature</p>
                 {contract.signed_at && (
                   <p className="text-[10px] text-gray-400">
                     {new Date(contract.signed_at).toLocaleDateString()}

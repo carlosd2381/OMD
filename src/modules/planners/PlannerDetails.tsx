@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Globe, Mail, Phone, Briefcase, MessageSquare, FileText, Settings, User, Plus, Check, Trash2 } from 'lucide-react';
 import { plannerService } from '../../services/plannerService';
@@ -34,13 +34,7 @@ export default function PlannerDetails() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskAssignee, setNewTaskAssignee] = useState('');
 
-  useEffect(() => {
-    if (id) {
-      loadPlanner(id);
-    }
-  }, [id]);
-
-  const loadPlanner = async (plannerId: string) => {
+  const loadPlanner = useCallback(async (plannerId: string) => {
     try {
       const [plannerData, eventsData, tasksData, usersData, templatesData] = await Promise.all([
         plannerService.getPlanner(plannerId),
@@ -81,7 +75,13 @@ export default function PlannerDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    if (id) {
+      loadPlanner(id);
+    }
+  }, [id, loadPlanner]);
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,21 +180,21 @@ export default function PlannerDetails() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link to="/planners" className="text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700">
+          <Link to="/planners" className="text-gray-500 dark:text-gray-400 hover:text-gray-700">
             <ArrowLeft className="h-6 w-6" />
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">{planner.first_name} {planner.last_name}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{planner.first_name} {planner.last_name}</h1>
         </div>
         <Link
           to={`/planners/${planner.id}/edit`}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
         >
-          <Edit className="h-5 w-5 mr-2 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+          <Edit className="h-5 w-5 mr-2 text-gray-500 dark:text-gray-400" />
           Edit Planner
         </Link>
       </div>
 
-      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 overflow-x-auto">
+      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
           {tabs.map((tab) => (
             <button
@@ -203,7 +203,7 @@ export default function PlannerDetails() {
               className={`${
                 activeTab === tab.id
                   ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
               {tab.label}
@@ -213,45 +213,45 @@ export default function PlannerDetails() {
       </div>
 
       {activeTab === 'overview' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Planner Information</h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Professional details and contact information.</p>
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Planner Information</h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Professional details and contact information.</p>
           </div>
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 px-4 py-5 sm:px-6">
+          <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
             <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Full Name</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{planner.first_name} {planner.last_name}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Full Name</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{planner.first_name} {planner.last_name}</dd>
               </div>
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Company</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex items-center">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Company</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white flex items-center">
                   <Briefcase className="h-4 w-4 mr-2 text-gray-400" />
                   {planner.company || <span className="text-gray-400 italic">N/A</span>}
                 </dd>
               </div>
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Email</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex items-center">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white flex items-center">
                   <Mail className="h-4 w-4 mr-2 text-gray-400" />
                   <a href={`mailto:${planner.email}`} className="text-primary hover:text-primary/80">{planner.email}</a>
                 </dd>
               </div>
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Phone</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex items-center">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white flex items-center">
                   <Phone className="h-4 w-4 mr-2 text-gray-400" />
                   {planner.phone ? (
-                    <a href={`tel:${planner.phone}`} className="text-gray-900 dark:text-white dark:text-white hover:text-gray-700">{planner.phone}</a>
+                    <a href={`tel:${planner.phone}`} className="text-gray-900 dark:text-white hover:text-gray-700">{planner.phone}</a>
                   ) : (
                     <span className="text-gray-400 italic">No phone provided</span>
                   )}
                 </dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Online Presence</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex space-x-4">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Online Presence</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white flex space-x-4">
                   {planner.website && (
                     <a href={planner.website} target="_blank" rel="noopener noreferrer" className="flex items-center text-primary hover:text-primary/80">
                       <Globe className="h-4 w-4 mr-1" /> Website
@@ -280,26 +280,26 @@ export default function PlannerDetails() {
       )}
 
       {activeTab === 'events' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Events</h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Events managed by this planner.</p>
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Events</h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Events managed by this planner.</p>
           </div>
           {events.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Date
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Event Name
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Client
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Venue
                     </th>
                     <th scope="col" className="relative px-6 py-3">
@@ -307,20 +307,20 @@ export default function PlannerDetails() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 dark:bg-gray-800 divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200">
                   {events.map((event) => {
                     const client = event.client_id ? clientsMap[event.client_id] : null;
                     const venue = event.venue_id ? venuesMap[event.venue_id] : null;
                     
                     return (
                       <tr key={event.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white dark:text-white">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                           {new Date(event.date).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white dark:text-white">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                           {event.name}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                           {client ? (
                             <Link to={`/clients/${client.id}`} className="text-primary hover:text-pink-900">
                               {client.first_name} {client.last_name}
@@ -329,7 +329,7 @@ export default function PlannerDetails() {
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                           {venue ? (
                             <Link to={`/venues/${venue.id}`} className="text-primary hover:text-pink-900">
                               {venue.name}
@@ -352,7 +352,7 @@ export default function PlannerDetails() {
               </table>
             </div>
           ) : (
-            <div className="px-4 py-5 sm:px-6 text-gray-500 dark:text-gray-400 dark:text-gray-400 text-sm">
+            <div className="px-4 py-5 sm:px-6 text-gray-500 dark:text-gray-400 text-sm">
               No events found for this planner.
             </div>
           )}
@@ -360,9 +360,9 @@ export default function PlannerDetails() {
       )}
 
       {activeTab === 'tasks' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
-          <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Tasks</h3>
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Tasks</h3>
             <div className="flex space-x-2">
               <select 
                 onChange={(e) => {
@@ -388,7 +388,7 @@ export default function PlannerDetails() {
           </div>
           
           {isAddingTask && (
-            <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+            <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
               <form onSubmit={handleAddTask} className="flex gap-2 items-start sm:items-center flex-col sm:flex-row">
                 <input
                   type="text"
@@ -418,7 +418,7 @@ export default function PlannerDetails() {
                   <button
                     type="button"
                     onClick={() => setIsAddingTask(false)}
-                    className="flex-1 sm:flex-none inline-flex justify-center items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="flex-1 sm:flex-none inline-flex justify-center items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                   >
                     Cancel
                   </button>
@@ -430,7 +430,7 @@ export default function PlannerDetails() {
           <ul className="divide-y divide-gray-200">
             {tasks.length > 0 ? (
               tasks.map((task) => (
-                <li key={task.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 flex items-center justify-between group">
+                <li key={task.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 flex items-center justify-between group">
                   <div className="flex items-center min-w-0 flex-1">
                     <button
                       onClick={() => handleToggleTask(task.id, task.status)}
@@ -443,7 +443,7 @@ export default function PlannerDetails() {
                       <Check className="h-3.5 w-3.5" />
                     </button>
                     <div className="ml-4 flex-1">
-                      <p className={`text-sm font-medium ${task.status === 'completed' ? 'text-gray-500 dark:text-gray-400 dark:text-gray-400 line-through' : 'text-gray-900 dark:text-white dark:text-white'}`}>
+                      <p className={`text-sm font-medium ${task.status === 'completed' ? 'text-gray-500 dark:text-gray-400 line-through' : 'text-gray-900 dark:text-white'}`}>
                         {task.title}
                       </p>
                       <div className="flex flex-wrap items-center gap-2 mt-0.5">
@@ -453,7 +453,7 @@ export default function PlannerDetails() {
                           </span>
                         )}
                         {task.status === 'completed' && task.completed_at && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                             Completed by {task.completed_by} on {new Date(task.completed_at).toLocaleDateString()} at {new Date(task.completed_at).toLocaleTimeString()}
                           </span>
                         )}
@@ -463,7 +463,7 @@ export default function PlannerDetails() {
                   <div className="ml-4 shrink-0">
                     <button
                       onClick={() => handleDeleteTask(task.id)}
-                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     >
                       <Trash2 className="h-4 w-4 mr-1" /> Delete
                     </button>
@@ -471,7 +471,7 @@ export default function PlannerDetails() {
                 </li>
               ))
             ) : (
-              <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">
+              <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                 No tasks yet. Add one or import from a template.
               </li>
             )}
@@ -480,16 +480,16 @@ export default function PlannerDetails() {
       )}
 
       {activeTab !== 'overview' && activeTab !== 'notes' && activeTab !== 'events' && activeTab !== 'tasks' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg p-12 text-center">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg p-12 text-center">
           {activeTab === 'contacts' && <User className="mx-auto h-12 w-12 text-gray-400" />}
           {activeTab === 'messages' && <MessageSquare className="mx-auto h-12 w-12 text-gray-400" />}
           {activeTab === 'facturas' && <FileText className="mx-auto h-12 w-12 text-gray-400" />}
           {activeTab === 'settings' && <Settings className="mx-auto h-12 w-12 text-gray-400" />}
           
-          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white dark:text-white">
+          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
             {tabs.find(t => t.id === activeTab)?.label}
           </h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">This feature is coming soon.</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">This feature is coming soon.</p>
         </div>
       )}
     </div>

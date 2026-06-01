@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,13 +14,32 @@ import type { Venue } from '../../types/venue';
 import toast from 'react-hot-toast';
 import { ArrowLeft, ChevronDown, ChevronUp, X, MapPin, Building2, Loader2 } from 'lucide-react';
 
-// Declare Google Maps types
-declare global {
-  interface Window {
-    google: any;
-    initMap: () => void;
-  }
-}
+type GooglePlacePrediction = {
+  structured_formatting: {
+    main_text: string;
+    secondary_text?: string;
+  };
+};
+
+type GoogleAutocompleteService = {
+  getPlacePredictions: (
+    request: { input: string; types: string[] },
+    callback: (predictions: GooglePlacePrediction[] | null, status: string) => void
+  ) => void;
+};
+
+type GoogleMapsPlaces = {
+  AutocompleteService: new () => GoogleAutocompleteService;
+  PlacesServiceStatus: {
+    OK: string;
+  };
+};
+
+type GoogleMapsGlobal = {
+  maps?: {
+    places?: GoogleMapsPlaces;
+  };
+};
 
 const leadSchema = z.object({
   first_name: z.string().min(1, 'First name is required'),
@@ -51,7 +70,7 @@ export default function LeadForm() {
   const [showVenueSuggestions, setShowVenueSuggestions] = useState(false);
   const [openCategories, setOpenCategories] = useState<string[]>([]);
   const isEditMode = !!id;
-  const autocompleteService = useRef<any>(null);
+  const autocompleteService = useRef<GoogleAutocompleteService | null>(null);
 
   const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<LeadFormData>({
     resolver: zodResolver(leadSchema),
@@ -64,31 +83,23 @@ export default function LeadForm() {
 
   const selectedServices = watch('services_interested') || [];
 
-  useEffect(() => {
-    loadProducts();
-    loadVenues();
-    if (isEditMode) {
-      loadLead();
-    }
-  }, [id]);
-
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     try {
       const data = await productService.getProducts();
       setProducts(data.filter(p => p.is_active));
     } catch (error) {
       console.error('Failed to load products', error);
     }
-  };
+  }, []);
 
-  const loadVenues = async () => {
+  const loadVenues = useCallback(async () => {
     try {
       const data = await venueService.getVenues();
       setLocalVenues(data);
     } catch (error) {
       console.error('Failed to load venues', error);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const initMaps = async () => {
@@ -100,8 +111,9 @@ export default function LeadForm() {
 
       try {
         await loadGoogleMaps(apiKey);
-        if (window.google && window.google.maps && window.google.maps.places) {
-          autocompleteService.current = new window.google.maps.places.AutocompleteService();
+        const googleMaps = window.google as GoogleMapsGlobal | undefined;
+        if (googleMaps?.maps?.places) {
+          autocompleteService.current = new googleMaps.maps.places.AutocompleteService();
         }
       } catch (error) {
         console.error('Error loading Google Maps:', error);
@@ -134,8 +146,10 @@ export default function LeadForm() {
     if (autocompleteService.current) {
       autocompleteService.current.getPlacePredictions(
         { input, types: ['establishment', 'geocode'] },
-        (predictions: any[], status: any) => {
-          const googleMatches = (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) 
+        (predictions, status) => {
+          const googleMaps = window.google as GoogleMapsGlobal | undefined;
+          const okStatus = googleMaps?.maps?.places?.PlacesServiceStatus.OK;
+          const googleMatches = (status === okStatus && predictions)
             ? predictions.map(p => ({ 
                 name: p.structured_formatting.main_text, 
                 source: 'google' as const,
@@ -162,10 +176,14 @@ export default function LeadForm() {
     }
   };
 
-  const loadLead = async () => {
+  const loadLead = useCallback(async () => {
+    if (!id) {
+      return;
+    }
+
     try {
       setLoading(true);
-      const lead = await leadService.getLead(id!);
+      const lead = await leadService.getLead(id);
       if (lead) {
         reset(lead);
       } else {
@@ -177,7 +195,15 @@ export default function LeadForm() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, navigate, reset]);
+
+  useEffect(() => {
+    loadProducts();
+    loadVenues();
+    if (isEditMode) {
+      loadLead();
+    }
+  }, [isEditMode, loadLead, loadProducts, loadVenues]);
 
   const onSubmit = async (data: LeadFormData) => {
     try {
@@ -309,18 +335,18 @@ export default function LeadForm() {
           onClick={() => navigate('/leads')}
           className="p-2 rounded-full hover:bg-gray-100"
         >
-          <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+          <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
         </button>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           {isEditMode ? 'Edit Lead' : 'New Lead'}
         </h1>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow px-4 py-5 sm:rounded-lg sm:p-6">
+      <div className="bg-white dark:bg-gray-800 shadow px-4 py-5 sm:rounded-lg sm:p-6">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* Client Details Section */}
           <div>
-            <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white dark:text-white">Client Details</h3>
+            <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white">Client Details</h3>
             <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
               <div className="sm:col-span-3">
                 <label htmlFor="first_name" className="block text-sm font-medium text-gray-700">
@@ -410,8 +436,8 @@ export default function LeadForm() {
             </div>
           </div>
 
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-6">
-            <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white dark:text-white">Event Details</h3>
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white">Event Details</h3>
             <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
               <div className="sm:col-span-3">
                 <label htmlFor="event_type" className="block text-sm font-medium text-gray-700">
@@ -481,7 +507,7 @@ export default function LeadForm() {
                   />
                 </div>
                 {showVenueSuggestions && venueSuggestions.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 dark:bg-gray-800 shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                  <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
                     {venueSuggestions.map((suggestion, index) => (
                       <div
                         key={index}
@@ -515,7 +541,7 @@ export default function LeadForm() {
                               )}
                             </span>
                             {suggestion.address && (
-                              <span className="block truncate text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                              <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
                                 {suggestion.address}
                               </span>
                             )}
@@ -556,22 +582,22 @@ export default function LeadForm() {
                       <button
                         type="button"
                         onClick={() => toggleCategory(category)}
-                        className="w-full bg-white dark:bg-gray-800 dark:bg-gray-800 border border-gray-300 rounded-md shadow-sm px-4 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm flex justify-between items-center"
+                        className="w-full bg-white dark:bg-gray-800 border border-gray-300 rounded-md shadow-sm px-4 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm flex justify-between items-center"
                       >
-                        <span className="font-medium text-gray-900 dark:text-white dark:text-white">{category}</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{category}</span>
                         {openCategories.includes(category) ? (
-                          <ChevronUp className="h-4 w-4 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+                          <ChevronUp className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                         ) : (
-                          <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+                          <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                         )}
                       </button>
                       
                       {openCategories.includes(category) && (
-                        <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 dark:bg-gray-800 shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                        <div className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
                           {productsByCategory[category].map((product) => (
                             <div
                               key={product.id}
-                              className="relative flex items-start py-2 px-4 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 cursor-pointer"
+                              className="relative flex items-start py-2 px-4 hover:bg-gray-50 dark:bg-gray-700 cursor-pointer"
                               onClick={() => handleServiceToggle(product.name)}
                             >
                               <div className="flex items-center h-5">
@@ -664,7 +690,7 @@ export default function LeadForm() {
               type="button"
               onClick={() => navigate('/leads')}
               disabled={actionInProgress !== null}
-              className="bg-white dark:bg-gray-800 dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
+              className="bg-white dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
             >
               Cancel
             </button>

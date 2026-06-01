@@ -19,7 +19,7 @@ const ZOHO_ACCOUNTS_URL = Deno.env.get('ZOHO_ACCOUNTS_URL') || 'https://accounts
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-Deno.serve(async (req) => {
+Deno.serve(async () => {
   try {
     // 0. Validate Config
     if (!ZOHO_CLIENT_ID || !ZOHO_CLIENT_SECRET || !ZOHO_REFRESH_TOKEN) {

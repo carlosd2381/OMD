@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, Calendar, Mail, Eye } from 'lucide-react';
 import { leadService } from '../../services/leadService';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { isPastDate } from '../../utils/formatters';
 import type { Lead } from '../../types/lead';
 import toast from 'react-hot-toast';
 
@@ -114,7 +115,7 @@ export default function LeadList() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Leads</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Leads</h1>
         <Link
           to="/leads/new"
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
@@ -125,17 +126,17 @@ export default function LeadList() {
       </div>
 
       <div className="space-y-3">
-        <div className="flex items-center px-4 py-3 bg-white dark:bg-gray-800 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 dark:border-gray-700 rounded-lg shadow-sm">
+        <div className="flex items-center px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
           <Search className="h-5 w-5 text-gray-400 mr-3" />
           <input
             type="text"
             placeholder="Search leads..."
-            className="flex-1 border-none focus:ring-0 text-gray-900 dark:text-white dark:text-white placeholder-gray-500"
+            className="flex-1 border-none focus:ring-0 text-gray-900 dark:text-white placeholder-gray-500"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 dark:border-gray-700 rounded-lg shadow-sm p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
             <div className="flex-1">
               <label className="block text-xs font-medium text-gray-500 mb-1">Event Type</label>
@@ -187,18 +188,18 @@ export default function LeadList() {
         </div>
       </div>
 
-      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+      <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
           <button
             onClick={() => setActiveTab('active')}
             className={`${
               activeTab === 'active'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             Active Leads
-            <span className={`ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium md:inline-block ${activeTab === 'active' ? 'bg-pink-100 text-primary' : 'bg-gray-100 text-gray-900 dark:text-white dark:text-white'}`}>
+            <span className={`ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium md:inline-block ${activeTab === 'active' ? 'bg-pink-100 text-primary' : 'bg-gray-100 text-gray-900 dark:text-white'}`}>
               {activeCount}
             </span>
           </button>
@@ -207,11 +208,11 @@ export default function LeadList() {
             className={`${
               activeTab === 'converted'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             Converted
-            <span className={`ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium md:inline-block ${activeTab === 'converted' ? 'bg-pink-100 text-primary' : 'bg-gray-100 text-gray-900 dark:text-white dark:text-white'}`}>
+            <span className={`ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium md:inline-block ${activeTab === 'converted' ? 'bg-pink-100 text-primary' : 'bg-gray-100 text-gray-900 dark:text-white'}`}>
               {convertedCount}
             </span>
           </button>
@@ -220,45 +221,47 @@ export default function LeadList() {
             className={`${
               activeTab === 'archived'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             Lost / Archived
-            <span className={`ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium md:inline-block ${activeTab === 'archived' ? 'bg-pink-100 text-primary' : 'bg-gray-100 text-gray-900 dark:text-white dark:text-white'}`}>
+            <span className={`ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium md:inline-block ${activeTab === 'archived' ? 'bg-pink-100 text-primary' : 'bg-gray-100 text-gray-900 dark:text-white'}`}>
               {archivedCount}
             </span>
           </button>
         </nav>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
         <ul className="divide-y divide-gray-200">
           {filteredLeads.map((lead) => (
             <li key={lead.id}>
               <div 
                 onClick={() => navigate(`/leads/${lead.id}`)}
-                className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 flex items-center justify-between cursor-pointer"
+                className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 flex items-center justify-between cursor-pointer"
               >
                 <div className="flex items-center min-w-0 flex-1">
-                  <div className="min-w-0 flex-1 px-4 md:grid md:grid-cols-2 md:gap-4">
+                  <div className="min-w-0 flex-1 px-4 md:grid-cols-2 md:gap-4">
                     <div>
                       <p className="text-sm font-medium text-primary truncate">
                         {lead.first_name} {lead.last_name}
                       </p>
-                      <div className="mt-1 flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                      <div className="mt-1 flex items-center text-sm text-gray-500 dark:text-gray-400">
                         <Mail className="shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
                         <span className="truncate">{lead.email}</span>
                       </div>
                     </div>
                     <div className="hidden md:block">
-                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                         <Calendar className="shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
-                        {lead.event_date || 'No date set'}
+                        <span className={`truncate ${isPastDate(lead.event_date) ? 'text-red-600 dark:text-red-400' : ''}`}>
+                          {lead.event_date || 'No date set'}
+                        </span>
                         <span className={`ml-4 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(lead.status)}`}>
                           {lead.status}
                         </span>
                       </div>
-                      <div className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                      <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         {lead.event_type} • {lead.guest_count ? `${lead.guest_count} guests` : 'Guests TBD'}
                       </div>
                     </div>
@@ -267,21 +270,21 @@ export default function LeadList() {
                 <div className="flex items-center space-x-2">
                   <Link 
                     to={`/leads/${lead.id}`} 
-                    className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Eye className="h-4 w-4 mr-1" /> View
                   </Link>
                   <Link 
                     to={`/leads/${lead.id}/edit`} 
-                    className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white dark:bg-gray-800 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Edit className="h-4 w-4 mr-1" /> Edit
                   </Link>
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleDelete(lead.id); }} 
-                    className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                   >
                     <Trash2 className="h-4 w-4 mr-1" /> Delete
                   </button>

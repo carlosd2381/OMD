@@ -170,6 +170,25 @@ export const clientService = {
     });
 
     if (error) throw error;
+  },
+
+  async createPortalSetupLink(id: string): Promise<string | null> {
+    const portalBaseUrl = import.meta.env.VITE_PORTAL_URL || window.location.origin;
+    const redirectTo = `${portalBaseUrl}/auth/update-password`;
+
+    const { data, error } = await supabase.functions.invoke('invite-client', {
+      body: {
+        clientId: id,
+        includeRecoveryLink: true,
+        redirectTo,
+      },
+    });
+
+    if (error) throw error;
+
+    const payload = data as { recovery_link?: string | null } | null;
+    const recoveryLink = payload?.recovery_link;
+    return recoveryLink && recoveryLink.length > 0 ? recoveryLink : null;
   }
 };
 

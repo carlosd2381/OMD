@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Copy, Code, Settings, GripVertical, ExternalLink, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { settingsService } from '../../services/settingsService';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { settingsService, type ContactForm as DbContactForm } from '../../services/settingsService';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
 type FieldType = 'text' | 'email' | 'phone' | 'textarea' | 'date' | 'select' | 'multiselect' | 'checkbox';
 
@@ -30,6 +30,28 @@ interface ContactForm {
   };
 }
 
+const parseFormFields = (value: unknown): FormField[] => {
+  if (!Array.isArray(value)) return [];
+  return value as FormField[];
+};
+
+const parseFormSettings = (value: unknown): ContactForm['settings'] => {
+  const defaultSettings: ContactForm['settings'] = {
+    successAction: 'message',
+    successMessage: 'Thank you for your inquiry!',
+    redirectUrl: '',
+    notifyEmail: '',
+    spamProtection: true,
+    sourceTracking: true,
+  };
+
+  if (!value || typeof value !== 'object') return defaultSettings;
+  return {
+    ...defaultSettings,
+    ...(value as Partial<ContactForm['settings']>),
+  };
+};
+
 export default function ContactFormSettings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'editor' | 'settings' | 'embed'>('editor');
@@ -37,26 +59,15 @@ export default function ContactFormSettings() {
   const [loading, setLoading] = useState(false);
   const [forms, setForms] = useState<ContactForm[]>([]);
 
-  useEffect(() => {
-    loadForms();
-  }, []);
-
-  const loadForms = async () => {
+  const loadForms = useCallback(async () => {
     setLoading(true);
     try {
       const data = await settingsService.getContactForms();
       const mapped: ContactForm[] = data.map(item => ({
         id: item.id,
         name: item.name,
-        fields: (item.fields as any[]) || [],
-        settings: (item.settings as any) || {
-            successAction: 'message',
-            successMessage: 'Thank you for your inquiry!',
-            redirectUrl: '',
-            notifyEmail: '',
-            spamProtection: true,
-            sourceTracking: true
-        }
+        fields: parseFormFields(item.fields),
+        settings: parseFormSettings(item.settings)
       }));
       
       if (mapped.length === 0) {
@@ -82,9 +93,12 @@ export default function ContactFormSettings() {
           setSelectedFormId(defaultForm.id);
       } else {
           setForms(mapped);
-          if (!selectedFormId || !mapped.find(f => f.id === selectedFormId)) {
-              setSelectedFormId(mapped[0].id);
-          }
+          setSelectedFormId((prevSelectedFormId) => {
+              if (!prevSelectedFormId || !mapped.find(f => f.id === prevSelectedFormId)) {
+                  return mapped[0].id;
+              }
+              return prevSelectedFormId;
+          });
       }
     } catch (error) {
       console.error('Error loading contact forms:', error);
@@ -92,7 +106,11 @@ export default function ContactFormSettings() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadForms();
+  }, [loadForms]);
 
   const currentForm = forms.find(f => f.id === selectedFormId) || forms[0];
 
@@ -105,15 +123,16 @@ export default function ContactFormSettings() {
             fields: currentForm.fields,
             settings: currentForm.settings
         };
+        const dbPayload = payload as unknown as Partial<DbContactForm>;
 
         if (currentForm.id.startsWith('new_')) {
-            const newForm = await settingsService.createContactForm(payload as any);
+          const newForm = await settingsService.createContactForm(dbPayload);
             toast.success('Form created successfully');
             // Reload to get the real ID
             await loadForms();
             setSelectedFormId(newForm.id);
         } else {
-            await settingsService.updateContactForm(currentForm.id, payload as any);
+          await settingsService.updateContactForm(currentForm.id, dbPayload);
             toast.success('Form saved successfully');
         }
     } catch (error) {
@@ -194,7 +213,7 @@ export default function ContactFormSettings() {
     updateFormFields(newFields);
   };
 
-  const onDragEnd = (result: any) => {
+  const onDragEnd = (result: DropResult) => {
     if (!result.destination || !currentForm) return;
 
     const items = Array.from(currentForm.fields);
@@ -237,11 +256,11 @@ export default function ContactFormSettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Contact Forms</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Create and manage lead capture forms.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Contact Forms</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Create and manage lead capture forms.</p>
           </div>
         </div>
         <div className="flex items-center space-x-3">
@@ -277,14 +296,14 @@ export default function ContactFormSettings() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+      <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('editor')}
             className={`${
               activeTab === 'editor'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Eye className="h-4 w-4 mr-2" />
@@ -295,7 +314,7 @@ export default function ContactFormSettings() {
             className={`${
               activeTab === 'settings'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Settings className="h-4 w-4 mr-2" />
@@ -306,7 +325,7 @@ export default function ContactFormSettings() {
             className={`${
               activeTab === 'embed'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Code className="h-4 w-4 mr-2" />
@@ -316,7 +335,7 @@ export default function ContactFormSettings() {
       </div>
 
       {/* Content */}
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6 min-h-[500px]">
+      <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg p-6 min-h-[500px]">
         
         {/* Editor Tab */}
         {activeTab === 'editor' && currentForm && (
@@ -453,7 +472,7 @@ export default function ContactFormSettings() {
         {activeTab === 'settings' && currentForm && (
           <div className="max-w-2xl space-y-8">
             <div>
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Form Details</h3>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Form Details</h3>
                 <div className="mt-4">
                     <label className="block text-sm font-medium text-gray-700">Form Name</label>
                     <input
@@ -466,13 +485,13 @@ export default function ContactFormSettings() {
             </div>
 
             <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Submission Actions</h3>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Submission Actions</h3>
               <div className="mt-4 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">On Success</label>
                   <select
                     value={currentForm.settings.successAction}
-                    onChange={(e) => updateSettings({ successAction: e.target.value as any })}
+                    onChange={(e) => updateSettings({ successAction: e.target.value as ContactForm['settings']['successAction'] })}
                     className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
                   >
                     <option value="message">Show Message</option>
@@ -505,8 +524,8 @@ export default function ContactFormSettings() {
               </div>
             </div>
 
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-8">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Notifications</h3>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Notifications</h3>
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-700">Send Notifications To</label>
                 <input
@@ -515,12 +534,12 @@ export default function ContactFormSettings() {
                   onChange={(e) => updateSettings({ notifyEmail: e.target.value })}
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                 />
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Separate multiple emails with commas.</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Separate multiple emails with commas.</p>
               </div>
             </div>
 
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-8">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Security & Tracking</h3>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Security & Tracking</h3>
               <div className="mt-4 space-y-4">
                 <div className="flex items-start">
                   <div className="flex items-center h-5">
@@ -534,7 +553,7 @@ export default function ContactFormSettings() {
                   </div>
                   <div className="ml-3 text-sm">
                     <label htmlFor="spam" className="font-medium text-gray-700">Enable Spam Protection</label>
-                    <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">Adds reCAPTCHA v3 to your form to prevent bot submissions.</p>
+                    <p className="text-gray-500 dark:text-gray-400">Adds reCAPTCHA v3 to your form to prevent bot submissions.</p>
                   </div>
                 </div>
 
@@ -550,7 +569,7 @@ export default function ContactFormSettings() {
                   </div>
                   <div className="ml-3 text-sm">
                     <label htmlFor="tracking" className="font-medium text-gray-700">Enable Source Tracking</label>
-                    <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">Automatically captures UTM parameters and referrer URL.</p>
+                    <p className="text-gray-500 dark:text-gray-400">Automatically captures UTM parameters and referrer URL.</p>
                   </div>
                 </div>
               </div>
@@ -561,12 +580,12 @@ export default function ContactFormSettings() {
         {/* Embed Tab */}
         {activeTab === 'embed' && currentForm && (
           <div className="space-y-6">
-            <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-md border border-gray-200 dark:border-gray-700 dark:border-gray-700">
+            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-md border border-gray-200 dark:border-gray-700">
               <div className="flex justify-between items-center mb-2">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white">Website Embed Code (Iframe)</h4>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white">Website Embed Code (Iframe)</h4>
                 <button
                   onClick={copyEmbedCode}
-                  className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                  className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700"
                 >
                   <Copy className="h-3 w-3 mr-1" />
                   Copy
@@ -575,25 +594,25 @@ export default function ContactFormSettings() {
               <code className="block bg-gray-900 text-gray-100 p-4 rounded text-sm font-mono overflow-x-auto">
                 {`<iframe src="${window.location.origin}/forms/${currentForm.id}" width="100%" height="800px" frameborder="0"></iframe>`}
               </code>
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                 Paste this code into your website's HTML where you want the form to appear. It works with WordPress, Squarespace, Wix, and custom sites.
               </p>
             </div>
 
-            <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-md border border-gray-200 dark:border-gray-700 dark:border-gray-700">
+            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-md border border-gray-200 dark:border-gray-700">
               <div className="flex justify-between items-center mb-2">
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white">Direct URL</h4>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white">Direct URL</h4>
                 <div className="flex space-x-2">
                   <button
                     onClick={() => window.open(`/forms/${currentForm.id}`, '_blank')}
-                    className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                    className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700"
                   >
                     <ExternalLink className="h-3 w-3 mr-1" />
                     Preview
                   </button>
                   <button
                     onClick={copyDirectLink}
-                    className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                    className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700"
                   >
                     <Copy className="h-3 w-3 mr-1" />
                     Copy Link
@@ -603,7 +622,7 @@ export default function ContactFormSettings() {
               <p className="text-sm text-gray-900 dark:text-white font-mono bg-white dark:bg-gray-800 p-2 border rounded">
                 {`${window.location.origin}/forms/${currentForm.id}`}
               </p>
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                 You can link directly to this form from your social media bio or email signature.
               </p>
             </div>

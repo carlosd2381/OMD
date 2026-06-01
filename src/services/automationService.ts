@@ -4,7 +4,7 @@ import type { Database } from '../types/supabase';
 export interface WorkflowAction {
   id: string;
   type: 'send_email' | 'create_task' | 'update_status' | 'webhook' | 'create_quote';
-  config: Record<string, any>;
+  config: Record<string, string | number | undefined>;
 }
 
 export interface WorkflowCondition {
@@ -127,7 +127,6 @@ export const automationService = {
       .order('triggered_at', { ascending: false });
 
     if (error) throw error;
-    // @ts-ignore
     return (data || []).map(mapToLog);
   }
 };

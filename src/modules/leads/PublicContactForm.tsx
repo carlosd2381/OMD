@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { settingsService } from '../../services/settingsService';
 import { leadService } from '../../services/leadService';
 import { venueService } from '../../services/venueService';
 import toast from 'react-hot-toast';
 import { Loader2, CheckCircle } from 'lucide-react';
+import type { CreateLeadDTO } from '../../types/lead';
 
 const VENUE_LABEL_REGEX = /\bvenue\b/i;
 const OTHER_VENUE_VALUE = '__other_venue__';
@@ -73,32 +74,126 @@ const normalizeServices = (value: unknown): string[] => {
     .filter(Boolean);
 };
 
+type ContactFormField = {
+  id: string;
+  label: string;
+  type: string;
+  required?: boolean;
+  placeholder?: string;
+  options?: string[];
+};
+
+type ContactFormSettings = {
+  successAction?: string;
+  redirectUrl?: string;
+  successMessage?: string;
+};
+
+type ContactFormConfig = {
+  id: string;
+  name?: string;
+  fields: ContactFormField[];
+  settings?: ContactFormSettings;
+};
+
+const LEAD_ROLES: CreateLeadDTO['role'][] = ['Bride', 'Groom', 'Parent', 'External Planner', 'Hotel/Resort', 'Private Venue'];
+const LEAD_EVENT_TYPES: CreateLeadDTO['event_type'][] = ['Wedding', 'Social Event', 'Corporate Event', 'Convention', 'Other'];
+const LEAD_SOURCES: CreateLeadDTO['lead_source'][] = [
+  'Website',
+  'Facebook',
+  'Facebook Group',
+  'Instagram',
+  'TikTok',
+  'External Planner',
+  'Hotel/Venue',
+  'Hotel/Venue PV',
+  'Vendor Referral',
+  'Client Referral',
+  'Other'
+];
+
+const asLeadRole = (value: unknown): CreateLeadDTO['role'] => {
+  const candidate = toTrimmedString(value);
+  return LEAD_ROLES.find((item) => item === candidate);
+};
+
+const asLeadEventType = (value: unknown): CreateLeadDTO['event_type'] => {
+  const candidate = toTrimmedString(value);
+  return LEAD_EVENT_TYPES.find((item) => item === candidate);
+};
+
+const asLeadSource = (value: unknown): CreateLeadDTO['lead_source'] => {
+  const candidate = toTrimmedString(value);
+  return LEAD_SOURCES.find((item) => item === candidate);
+};
+
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const toFormField = (value: unknown): ContactFormField | null => {
+  if (!isObjectRecord(value)) return null;
+  if (typeof value.id !== 'string' || typeof value.label !== 'string' || typeof value.type !== 'string') {
+    return null;
+  }
+  return {
+    id: value.id,
+    label: value.label,
+    type: value.type,
+    required: typeof value.required === 'boolean' ? value.required : undefined,
+    placeholder: typeof value.placeholder === 'string' ? value.placeholder : undefined,
+    options: Array.isArray(value.options)
+      ? value.options.filter((item): item is string => typeof item === 'string')
+      : undefined,
+  };
+};
+
+const parseFormFields = (value: unknown): ContactFormField[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(toFormField)
+    .filter((field): field is ContactFormField => field !== null);
+};
+
+const parseFormSettings = (value: unknown): ContactFormSettings | undefined => {
+  if (!isObjectRecord(value)) return undefined;
+  return {
+    successAction: typeof value.successAction === 'string' ? value.successAction : undefined,
+    redirectUrl: typeof value.redirectUrl === 'string' ? value.redirectUrl : undefined,
+    successMessage: typeof value.successMessage === 'string' ? value.successMessage : undefined,
+  };
+};
+
 export default function PublicLeadForm() {
   const { formId } = useParams<{ formId: string }>();
-  const [formConfig, setFormConfig] = useState<any>(null);
+  const [formConfig, setFormConfig] = useState<ContactFormConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [venueOptions, setVenueOptions] = useState<{ preferred: string[]; others: string[] }>({ preferred: [], others: [] });
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (formId) {
-      loadFormConfig();
-    }
-  }, [formId]);
 
   useEffect(() => {
     loadVenues();
   }, []);
 
-  const loadFormConfig = async () => {
+  const loadFormConfig = useCallback(async () => {
+    if (!formId) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const forms = await settingsService.getContactForms();
-      const form = forms.find((f: any) => f.id === formId);
+      const form = forms.find((f) => f.id === formId);
       if (form) {
-        setFormConfig(form);
+        const name = typeof form.name === 'string' ? form.name : 'Contact Form';
+        setFormConfig({
+          id: form.id,
+          name,
+          fields: parseFormFields(form.fields),
+          settings: parseFormSettings(form.settings)
+        });
       } else {
         toast.error('Form not found');
       }
@@ -107,7 +202,11 @@ export default function PublicLeadForm() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [formId]);
+
+  useEffect(() => {
+    loadFormConfig();
+  }, [loadFormConfig]);
 
   const loadVenues = async () => {
     try {
@@ -126,7 +225,7 @@ export default function PublicLeadForm() {
     }
   };
 
-  const handleSelectChange = (field: any, value: string) => {
+  const handleSelectChange = (field: ContactFormField, value: string) => {
     setFormData((prev) => ({ ...prev, [field.label]: value }));
     if (value !== OTHER_VENUE_VALUE) {
       setCustomFieldValues((prev) => {
@@ -143,8 +242,8 @@ export default function PublicLeadForm() {
     setSubmitting(true);
     try {
       const fields = formConfig?.fields || [];
-      const fieldMap = new Map<string, any>();
-      const normalizedFields: { field: any; normalizedLabel: string }[] = fields.map((field: any) => {
+      const fieldMap = new Map<string, ContactFormField>();
+      const normalizedFields: { field: ContactFormField; normalizedLabel: string }[] = fields.map((field) => {
         if (field?.label) {
           fieldMap.set(field.label, field);
         }
@@ -184,35 +283,36 @@ export default function PublicLeadForm() {
       const eventTypeValue = toTrimmedString(lookupField(FIELD_ALIASES.eventType).value);
       const eventDateValue = toTrimmedString(lookupField(FIELD_ALIASES.eventDate).value);
       const guestCountValue = lookupField(FIELD_ALIASES.guestCount).value;
-      const roleValue = toTrimmedString(lookupField(FIELD_ALIASES.role).value);
+      const roleValue = lookupField(FIELD_ALIASES.role).value;
       const budgetValue = lookupField(FIELD_ALIASES.budget).value;
-      const leadSourceValue = toTrimmedString(lookupField(FIELD_ALIASES.leadSource).value);
+      const leadSourceValue = lookupField(FIELD_ALIASES.leadSource).value;
       const servicesValue = lookupField(FIELD_ALIASES.services).value ?? formData['Services Interested'];
 
       const guest_count = parseIntegerValue(guestCountValue);
       const budget = parseCurrencyValue(budgetValue);
       const services_interested = normalizeServices(servicesValue);
-      const resolvedLeadSource = leadSourceValue || 'Website';
+      const resolvedLeadSource = asLeadSource(leadSourceValue) || 'Website';
 
-      const venueField = fields.find((field: any) => field?.type === 'select' && isVenueFieldLabel(field.label));
+      const venueField = fields.find((field) => field?.type === 'select' && isVenueFieldLabel(field.label));
       const venueSelectionLabel = venueField?.label;
       const venueSelectionValue = venueSelectionLabel ? formData[venueSelectionLabel] : undefined;
       const venueCustomValue = venueField ? customFieldValues[venueField.id]?.trim() : '';
       const venueFromOtherField = formData['Venue'] || formData['Venue Name'];
-      const resolvedVenueName = venueSelectionValue === OTHER_VENUE_VALUE
+      const resolvedVenueNameRaw = venueSelectionValue === OTHER_VENUE_VALUE
         ? venueCustomValue || undefined
         : venueSelectionValue || venueFromOtherField || undefined;
+      const resolvedVenueName = toTrimmedString(resolvedVenueNameRaw);
 
       // Map form fields to lead fields
       // This is a simplified mapping. In a real app, you'd want to map specific field IDs 
       // or labels to the core lead entity fields.
-      const leadData: any = {
+      const leadData: CreateLeadDTO = {
         first_name: leadFirstName,
         last_name: leadLastName,
         email: emailValue,
         phone: phoneValue,
-        role: roleValue,
-        event_type: eventTypeValue || undefined,
+        role: asLeadRole(roleValue),
+        event_type: asLeadEventType(eventTypeValue),
         event_date: eventDateValue || undefined,
         guest_count,
         budget,
@@ -235,8 +335,9 @@ export default function PublicLeadForm() {
       setSubmitted(true);
       
         if (formConfig?.settings?.successAction === 'redirect' && formConfig?.settings?.redirectUrl) {
+          const redirectUrl = formConfig.settings.redirectUrl;
           setTimeout(() => {
-            window.location.href = formConfig.settings.redirectUrl;
+            window.location.href = redirectUrl;
           }, 2000);
           return;
         }
@@ -287,7 +388,7 @@ export default function PublicLeadForm() {
       </h1>
       
       <form onSubmit={handleSubmit} className="space-y-4">
-        {formConfig.fields.map((field: any) => {
+        {formConfig.fields.map((field) => {
           const isVenueSelect = field.type === 'select' && isVenueFieldLabel(field.label);
           const showCustomVenueInput = isVenueSelect && formData[field.label] === OTHER_VENUE_VALUE;
 
@@ -311,7 +412,7 @@ export default function PublicLeadForm() {
                   required={field.required}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                   onChange={(e) => handleSelectChange(field, e.target.value)}
-                  value={formData[field.label] || ''}
+                  value={toTrimmedString(formData[field.label]) || ''}
                 >
                   <option value="">Select an option...</option>
                   {isVenueSelect ? (
@@ -333,7 +434,7 @@ export default function PublicLeadForm() {
                       <option value={OTHER_VENUE_VALUE}>{OTHER_VENUE_LABEL}</option>
                     </>
                   ) : (
-                    field.options?.map((opt: string) => (
+                    field.options?.map((opt) => (
                       <option key={opt} value={opt}>{opt}</option>
                     ))
                   )}
@@ -351,13 +452,16 @@ export default function PublicLeadForm() {
               </>
             ) : field.type === 'multiselect' ? (
               <div className="space-y-2 bg-gray-50 p-3 rounded-md border border-gray-200">
-                {field.options?.map((opt: string) => (
+                {field.options?.map((opt) => (
                   <label key={opt} className="flex items-center">
                     <input
                       type="checkbox"
                       className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                       onChange={(e) => {
-                        const current = formData[field.label] || [];
+                        const fieldValue = formData[field.label];
+                        const current = Array.isArray(fieldValue)
+                          ? fieldValue.filter((item: unknown): item is string => typeof item === 'string')
+                          : [];
                         const updated = e.target.checked 
                           ? [...current, opt]
                           : current.filter((item: string) => item !== opt);

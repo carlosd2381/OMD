@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Clock, AlertCircle, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { settingsService } from '../../services/settingsService';
+import { settingsService, type PaymentSchedule as DbPaymentSchedule } from '../../services/settingsService';
 
 type DueType = 'on_booking' | 'before_event' | 'after_event' | 'custom';
 
@@ -21,6 +21,20 @@ interface Schedule {
   isDefault: boolean;
   milestones: Milestone[];
 }
+
+const parseMilestones = (value: unknown): Milestone[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map((milestone) => {
+    const m = milestone as Partial<Milestone>;
+    return {
+      id: m.id || Math.random().toString(36).substr(2, 9),
+      name: m.name || 'Milestone',
+      percentage: typeof m.percentage === 'number' ? m.percentage : 0,
+      dueType: (m.dueType as DueType) || 'custom',
+      daysOffset: typeof m.daysOffset === 'number' ? m.daysOffset : 0,
+    };
+  });
+};
 
 export default function PaymentScheduleSettings() {
   const navigate = useNavigate();
@@ -50,13 +64,7 @@ export default function PaymentScheduleSettings() {
         name: item.name,
         description: item.description || '',
         isDefault: item.is_default || false,
-        milestones: (item.milestones as any[])?.map((m: any) => ({
-            id: m.id || Math.random().toString(36).substr(2, 9),
-            name: m.name,
-            percentage: m.percentage,
-            dueType: m.dueType,
-            daysOffset: m.daysOffset
-        })) || []
+        milestones: parseMilestones(item.milestones)
       }));
       setSchedules(mapped);
     } catch (error) {
@@ -109,13 +117,13 @@ export default function PaymentScheduleSettings() {
             description: formData.description,
             is_default: formData.isDefault,
             milestones: formData.milestones
-        };
+        } as unknown as Partial<DbPaymentSchedule>;
 
         if (formData.id.startsWith('new_')) {
-            await settingsService.createPaymentSchedule(payload as any);
+          await settingsService.createPaymentSchedule(payload);
             toast.success('Schedule created');
         } else {
-            await settingsService.updatePaymentSchedule(formData.id, payload as any);
+          await settingsService.updatePaymentSchedule(formData.id, payload);
             toast.success('Schedule updated');
         }
         
@@ -168,9 +176,9 @@ export default function PaymentScheduleSettings() {
     }
   };
 
-  const updateMilestone = (index: number, field: keyof Milestone, value: any) => {
+  const updateMilestone = <K extends keyof Milestone>(index: number, field: K, value: Milestone[K]) => {
     const newMilestones = [...formData.milestones];
-    newMilestones[index] = { ...newMilestones[index], [field]: value };
+    newMilestones[index] = { ...newMilestones[index], [field]: value } as Milestone;
     setFormData({ ...formData, milestones: newMilestones });
   };
 
@@ -198,11 +206,11 @@ export default function PaymentScheduleSettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Payment Schedules</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Define standard payment terms for your events.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Payment Schedules</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Define standard payment terms for your events.</p>
           </div>
         </div>
         <button
@@ -218,14 +226,14 @@ export default function PaymentScheduleSettings() {
       {loading && schedules.length === 0 ? (
           <div className="text-center py-12">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-primary border-t-transparent"></div>
-              <p className="mt-2 text-gray-500 dark:text-gray-400 dark:text-gray-400">Loading schedules...</p>
+              <p className="mt-2 text-gray-500 dark:text-gray-400">Loading schedules...</p>
           </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">
             {schedules.map((schedule) => (
             <div 
                 key={schedule.id} 
-                className={`bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg border-l-4 ${schedule.isDefault ? 'border-primary' : 'border-gray-200 dark:border-gray-700 dark:border-gray-700'} overflow-hidden`}
+                className={`bg-white dark:bg-gray-800 shadow sm:rounded-lg border-l-4 ${schedule.isDefault ? 'border-primary' : 'border-gray-200 dark:border-gray-700'} overflow-hidden`}
             >
                 {editingId === schedule.id ? (
                 // Edit Mode
@@ -251,13 +259,13 @@ export default function PaymentScheduleSettings() {
                     </div>
                     </div>
 
-                    <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-4">
-                    <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white mb-4">Payment Milestones</h4>
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">Payment Milestones</h4>
                     <div className="space-y-3">
                         {formData.milestones.map((milestone, index) => (
-                        <div key={milestone.id} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-3 rounded-md">
+                        <div key={milestone.id} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-md">
                             <div className="flex-1">
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Name</label>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Name</label>
                             <input
                                 type="text"
                                 value={milestone.name}
@@ -266,7 +274,7 @@ export default function PaymentScheduleSettings() {
                             />
                             </div>
                             <div className="w-24">
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Percent %</label>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Percent %</label>
                             <input
                                 type="number"
                                 value={milestone.percentage}
@@ -275,10 +283,10 @@ export default function PaymentScheduleSettings() {
                             />
                             </div>
                             <div className="w-40">
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Due</label>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Due</label>
                             <select
                                 value={milestone.dueType}
-                                onChange={(e) => updateMilestone(index, 'dueType', e.target.value)}
+                                onChange={(e) => updateMilestone(index, 'dueType', e.target.value as DueType)}
                                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                             >
                                 <option value="on_booking">On Booking</option>
@@ -288,7 +296,7 @@ export default function PaymentScheduleSettings() {
                             </div>
                             {milestone.dueType !== 'on_booking' && (
                             <div className="w-32">
-                                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Days Offset</label>
+                                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Days Offset</label>
                                 <div className="relative mt-1 rounded-md shadow-sm">
                                 <input
                                     type="number"
@@ -297,7 +305,7 @@ export default function PaymentScheduleSettings() {
                                     className="block w-full border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm"
                                 />
                                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                    <span className="text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-xs">days</span>
+                                    <span className="text-gray-500 dark:text-gray-400 sm:text-xs">days</span>
                                 </div>
                                 </div>
                             </div>
@@ -322,10 +330,10 @@ export default function PaymentScheduleSettings() {
                     </button>
                     </div>
 
-                    <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700 dark:border-gray-700">
+                    <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <button
                         onClick={handleCancelEdit}
-                        className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                        className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700"
                     >
                         Cancel
                     </button>
@@ -344,7 +352,7 @@ export default function PaymentScheduleSettings() {
                     <div className="flex items-center">
                         <Clock className="h-5 w-5 text-gray-400 mr-3" />
                         <div>
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white flex items-center">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
                             {schedule.name}
                             {schedule.isDefault && (
                             <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
@@ -352,14 +360,14 @@ export default function PaymentScheduleSettings() {
                             </span>
                             )}
                         </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{schedule.description}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{schedule.description}</p>
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
                         {!schedule.isDefault && (
                         <button
                             onClick={() => handleSetDefault(schedule.id)}
-                            className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-primary px-3 py-1"
+                            className="text-sm text-gray-500 dark:text-gray-400 hover:text-primary px-3 py-1"
                         >
                             Set as Default
                         </button>
@@ -393,17 +401,17 @@ export default function PaymentScheduleSettings() {
                                 <div className="relative flex space-x-3">
                                 <div>
                                     <span className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center ring-8 ring-white">
-                                    <Calendar className="h-4 w-4 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+                                    <Calendar className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                                     </span>
                                 </div>
                                 <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
                                     <div>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
-                                        <span className="font-medium text-gray-900 dark:text-white dark:text-white">{milestone.name}</span>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                        <span className="font-medium text-gray-900 dark:text-white">{milestone.name}</span>
                                         {' '}({milestone.percentage}%)
                                     </p>
                                     </div>
-                                    <div className="whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                                    <div className="whitespace-nowrap text-right text-sm text-gray-500 dark:text-gray-400">
                                     {milestone.dueType === 'on_booking' ? (
                                         <span className="text-green-600 font-medium">Due on Booking</span>
                                     ) : (

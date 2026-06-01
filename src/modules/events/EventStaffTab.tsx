@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Trash2, User, RefreshCw } from 'lucide-react';
 import { staffService } from '../../services/staffService';
 import { runSheetService } from '../../services/runSheetService';
@@ -96,19 +96,6 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
       };
     });
   }, [assignments, payConfigDrafts, payRateMap, compensationContext]);
-
-  useEffect(() => {
-    loadData();
-
-    // Listen for run sheet updates by other tabs/components
-    const handler = (e: any) => {
-      console.debug('[EventStaffTab] received run_sheet:updated', e?.detail);
-      if (e?.detail?.eventId === event.id) loadData();
-    };
-    window.addEventListener('run_sheet:updated', handler as any);
-
-    return () => window.removeEventListener('run_sheet:updated', handler as any);
-  }, [event.id]);
 
   const upsertDraft = (
     assignmentId: string,
@@ -218,7 +205,7 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
     }
   };
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [staffData, assignmentData, rateData, runSheetData, quotes] = await Promise.all([
         staffService.getStaffMembers(),
@@ -249,7 +236,7 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
           map[match.key] = { staff_id: a.staff_id, assignmentId: a.id };
         } else {
           // If role doesn't match our canonical keys, store using role string as key (safe fallback)
-          map[a.role] = { staff_id: a.staff_id, assignmentId: a.id } as any;
+          map[a.role] = { staff_id: a.staff_id, assignmentId: a.id };
         }
       });
 
@@ -274,7 +261,22 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [event.id]);
+
+  useEffect(() => {
+    loadData();
+
+    const handler = (e: globalThis.Event) => {
+      const customEvent = e as unknown as CustomEvent<{ eventId?: string }>;
+      console.debug('[EventStaffTab] received run_sheet:updated', customEvent.detail);
+      if (customEvent.detail?.eventId === event.id) {
+        loadData();
+      }
+    };
+    window.addEventListener('run_sheet:updated', handler as EventListener);
+
+    return () => window.removeEventListener('run_sheet:updated', handler as EventListener);
+  }, [event.id, loadData]);
 
   const handleAddStaff = async () => {
     if (!selectedStaffId) return;
@@ -404,7 +406,7 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Event Staffing</h3>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white">Event Staffing</h3>
         <div className="flex items-center space-x-3">
           <button
             onClick={() => setIsAdding(true)}
@@ -424,11 +426,11 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
 
       {/* Add Staff Form */}
       {isAdding && (
-        <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700 dark:border-gray-700 mb-6">
-          <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white mb-3">New Assignment</h4>
+        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700 mb-6">
+          <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">New Assignment</h4>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-5 items-end">
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">Staff Member</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Staff Member</label>
               <select
                 value={selectedStaffId}
                 onChange={(e) => setSelectedStaffId(e.target.value)}
@@ -443,7 +445,7 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">Role</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Role</label>
               <input
                 type="text"
                 value={selectedRole}
@@ -453,10 +455,10 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">Pay Rate ($)</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Pay Rate ($)</label>
               <div className="relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span className="text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">$</span>
+                  <span className="text-gray-500 dark:text-gray-400 sm:text-sm">$</span>
                 </div>
                 <input
                   type="number"
@@ -476,7 +478,7 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
               </button>
               <button
                 onClick={() => setIsAdding(false)}
-                className="flex-1 inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                className="flex-1 inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700"
               >
                 Cancel
               </button>
@@ -486,13 +488,13 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
       )}
 
       {/* Structured Positions */}
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md p-4">
+      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md p-4">
         {Object.entries(POSITIONS).map(([category, positions]) => (
           <section key={category} className="mb-6">
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-400 mb-3">{category}</h4>
             {/* Two-column layout; label above select for better visibility */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-2">
-              {positions.map((p: any) => (
+              {positions.map((p) => (
                 <div key={p.key} className="flex flex-col">
                   <label className="text-sm text-gray-600 dark:text-gray-400 mb-1">{p.label}</label>
                   <select
@@ -513,10 +515,10 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
       </div>
 
       {/* Legacy assignments list (kept for backward compatibility) */}
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md mt-6">
+      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md mt-6">
         <ul className="divide-y divide-gray-200">
           {enrichedAssignments.length === 0 ? (
-            <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400 text-sm">
+            <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 text-sm">
               No staff assigned to this event yet.
             </li>
           ) : (
@@ -527,17 +529,17 @@ export default function EventStaffTab({ event }: EventStaffTabProps) {
               const showRevenueWarning = assignment.payRule?.rate_type === 'percent_revenue' && !revenuePreTax;
 
               return (
-                <li key={assignment.id} className="px-4 py-5 sm:px-6 space-y-4 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+                <li key={assignment.id} className="px-4 py-5 sm:px-6 space-y-4 hover:bg-gray-50 dark:bg-gray-700">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
-                      <div className="flex-shrink-0 bg-pink-100 rounded-full p-2">
+                      <div className="shrink-0 bg-pink-100 rounded-full p-2">
                         <User className="h-5 w-5 text-primary" />
                       </div>
                       <div className="ml-4">
                         <p className="text-sm font-medium text-primary truncate">
                           {staff ? `${staff.first_name} ${staff.last_name}` : 'Unknown'}
                         </p>
-                        <p className="flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                        <p className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                           <span className="font-medium mr-2">{assignment.role}</span>
                           {assignment.status === 'confirmed' && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Calendar, FileText, CheckSquare } from 'lucide-react';
 import { eventService } from '../../services/eventService';
@@ -13,6 +13,7 @@ import RunSheetTab from './RunSheetTab';
 import EventStaffTab from './EventStaffTab';
 import EventFinancialsTab from './EventFinancialsTab';
 import DataPromotion from './components/DataPromotion';
+import { isPastDate } from '../../utils/formatters';
 import toast from 'react-hot-toast';
 
 type Tab = 'overview' | 'timeline' | 'run_sheet' | 'financials' | 'tasks' | 'staff' | 'notes';
@@ -26,13 +27,7 @@ export default function EventDetails() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
-  useEffect(() => {
-    if (id) {
-      loadEvent(id);
-    }
-  }, [id]);
-
-  const loadEvent = async (eventId: string) => {
+  const loadEvent = useCallback(async (eventId: string) => {
     try {
       const data = await eventService.getEvent(eventId);
       if (data) {
@@ -65,7 +60,13 @@ export default function EventDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    if (id) {
+      loadEvent(id);
+    }
+  }, [id, loadEvent]);
 
   if (loading) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
@@ -89,15 +90,15 @@ export default function EventDetails() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link to="/events" className="text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700">
+          <Link to="/events" className="text-gray-500 dark:text-gray-400 hover:text-gray-700">
             <ArrowLeft className="h-6 w-6" />
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">{event.name}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{event.name}</h1>
         </div>
         <div className="flex space-x-3">
           <Link
             to={`/events/${event.id}/questionnaire`}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
           >
             <FileText className="h-5 w-5 mr-2" />
             Questionnaire
@@ -112,7 +113,7 @@ export default function EventDetails() {
         </div>
       </div>
 
-      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 overflow-x-auto">
+      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
           {tabs.map((tab) => (
             <button
@@ -121,7 +122,7 @@ export default function EventDetails() {
               className={`${
                 activeTab === tab.id
                   ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
               {tab.label}
@@ -134,44 +135,44 @@ export default function EventDetails() {
         <div className="space-y-6">
           <DataPromotion event={event} onUpdate={() => loadEvent(event.id)} />
           
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
             <div className="px-4 py-5 sm:px-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Event Overview</h3>
-              <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Details and key information.</p>
+              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Event Overview</h3>
+              <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Details and key information.</p>
             </div>
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 px-4 py-5 sm:px-6">
+          <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
             <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Event Name</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{event.name}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Event Name</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{event.name}</dd>
               </div>
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Venue Name</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{venue?.name || event.venue_name || 'No venue assigned'}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Venue Name</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{venue?.name || event.venue_name || 'No venue assigned'}</dd>
               </div>
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Event Date</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex items-center">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Event Date</dt>
+                <dd className={`mt-1 text-sm flex items-center ${isPastDate(event.date) ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
                   <Calendar className="h-4 w-4 mr-2 text-gray-400" />
                   {event.date}
                 </dd>
               </div>
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Guest Count</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{event.guest_count || 'N/A'}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Guest Count</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{event.guest_count || 'N/A'}</dd>
               </div>
 
               {acceptedQuote && (
                 <div className="sm:col-span-2 mt-4">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-2">Menu / Items</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">
-                    <ul className="border border-gray-200 dark:border-gray-700 dark:border-gray-700 rounded-md divide-y divide-gray-200">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Menu / Items</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white">
+                    <ul className="border border-gray-200 dark:border-gray-700 rounded-md divide-y divide-gray-200">
                       {acceptedQuote.items
                         .filter(item => !item.description.toLowerCase().includes('flete') && !item.description.toLowerCase().includes('delivery'))
                         .map((item) => (
                         <li key={item.id} className="pl-3 pr-4 py-3 flex items-center justify-between text-sm">
                           <div className="w-0 flex-1 flex items-center">
-                            <span className="font-medium text-gray-900 dark:text-white dark:text-white mr-2">{item.quantity}x</span>
+                            <span className="font-medium text-gray-900 dark:text-white mr-2">{item.quantity}x</span>
                             <span className="truncate">{item.description}</span>
                           </div>
                         </li>
@@ -183,8 +184,8 @@ export default function EventDetails() {
 
               {event.notes && (
                 <div className="sm:col-span-2">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Notes</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white whitespace-pre-wrap">{event.notes}</dd>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Notes</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white whitespace-pre-wrap">{event.notes}</dd>
                 </div>
               )}
             </dl>

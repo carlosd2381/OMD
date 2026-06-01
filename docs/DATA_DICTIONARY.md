@@ -333,6 +333,27 @@ This document serves as the central reference for all data entities, their field
 | Due Date | `due_date` | date | Yes | |
 | Type | `type` | enum | Yes | retainer, standard, change_order, final_balance |
 
+### Financial Transactions (`financial_transactions` table)
+*Ref: `src/types/financialModule.ts`, `src/services/financialModuleService.ts`*
+| UI Label | Field Name (Code/DB) | Type | Required | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Direction | `direction` | enum | Yes | received, sent |
+| Status | `status` | enum | Yes | pending, cleared, failed, cancelled |
+| Amount | `amount` | decimal | Yes | Must be greater than 0 |
+| Currency | `currency` | enum | Yes | Uses `currency_code` (e.g., MXN, USD, CAD, EUR, GBP) |
+| Transaction Date | `transaction_date` | date | Yes | Defaults to current date |
+| Payment Method | `payment_method` | string | No | e.g., bank transfer, cash, stripe |
+| Reference | `reference` | string | No | External transaction ID or internal reference |
+| Notes | `notes` | string | No | Free-form details |
+| Invoice | `invoice_id` | uuid | No | Foreign Key to `invoices.id` |
+| Event | `event_id` | uuid | No | Foreign Key to `events.id` |
+| Client | `client_id` | uuid | No | Foreign Key to `clients.id` |
+| Created By | `created_by` | uuid | No | Foreign Key to `auth.users.id` |
+
+**Invoice tracking note:**
+- `amount_received` is derived from summed `financial_transactions.amount` where `direction = received`, `status = cleared`, and matching `invoice_id`.
+- `amount_outstanding` is derived as `invoices.total_amount - amount_received` (min 0).
+
 ### Tasks (`tasks` table)
 *Ref: `src/types/task.ts`*
 | UI Label | Field Name (Code/DB) | Type | Required | Notes |

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Trash2, DollarSign, Edit, Save, Calculator, FileText, X } from 'lucide-react';
 import { financialService } from '../../services/financialService';
 import { staffService } from '../../services/staffService';
@@ -129,11 +129,7 @@ export default function EventFinancialsTab({ event, venue }: EventFinancialsTabP
   const profit = totalRevenue - totalCosts;
   const profitMargin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
 
-  useEffect(() => {
-    loadData();
-  }, [event.id]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [
@@ -206,7 +202,11 @@ export default function EventFinancialsTab({ event, venue }: EventFinancialsTabP
     } finally {
       setLoading(false);
     }
-  };
+  }, [event.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleSaveExpense = async () => {
     if (!newExpense.name || (!newExpense.amount_mxn && !newExpense.amount_usd)) {
@@ -1039,12 +1039,13 @@ export default function EventFinancialsTab({ event, venue }: EventFinancialsTabP
   );
 
   // Handlers
-  function handleCommissionChange(index: number, field: keyof EventCommission, value: any) {
+  function handleCommissionChange(index: number, field: keyof EventCommission, value: string | number) {
     const updated = [...commissions];
     updated[index] = { ...updated[index], [field]: value };
     // Recalculate amount if percentage changed
     if (field === 'percentage' && acceptedQuote) {
-      updated[index].amount = (acceptedQuote.total_amount * (value as number)) / 100;
+      const percentage = typeof value === 'number' ? value : Number(value);
+      updated[index].amount = (acceptedQuote.total_amount * (Number.isFinite(percentage) ? percentage : 0)) / 100;
     }
     setCommissions(updated);
   }

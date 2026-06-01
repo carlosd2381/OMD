@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { ArrowLeft, Save, Upload, CreditCard, Calendar, MapPin, Phone, Mail, User } from 'lucide-react';
@@ -23,13 +23,7 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
   const { register, handleSubmit, reset, setValue, watch } = useForm<StaffProfile>();
   const isDriver = watch('is_driver');
 
-  useEffect(() => {
-    if (id) {
-      loadProfile(id);
-    }
-  }, [id]);
-
-  const loadProfile = async (userId: string) => {
+  const loadProfile = useCallback(async (userId: string) => {
     try {
       const data = await staffService.getStaffProfile(userId);
       if (data) {
@@ -42,7 +36,13 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [reset]);
+
+  useEffect(() => {
+    if (id) {
+      void loadProfile(id);
+    }
+  }, [id, loadProfile]);
 
   const onSubmit = async (data: StaffProfile) => {
     if (!id) return;
@@ -50,7 +50,7 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
     try {
       await staffService.updateStaffProfile(id, data);
       toast.success('Profile updated successfully');
-      loadProfile(id);
+      void loadProfile(id);
     } catch (error) {
       console.error('Error updating profile:', error);
       toast.error('Failed to update profile');
@@ -74,10 +74,10 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <button onClick={() => navigate(-1)} className="text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700">
+          <button onClick={() => navigate(-1)} className="text-gray-500 dark:text-gray-400 hover:text-gray-700">
             <ArrowLeft className="h-6 w-6" />
           </button>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             {profile.first_name} {profile.last_name}
           </h1>
         </div>
@@ -91,8 +91,8 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
         </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow rounded-lg">
-        <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 flex">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
+        <div className="border-b border-gray-200 dark:border-gray-700 flex">
           <button
             className={`flex-1 px-6 py-4 text-sm font-medium ${activeTab === 'personal' ? 'text-primary border-b-2 border-primary' : 'text-gray-500'}`}
             onClick={() => setActiveTab('personal')}
@@ -115,7 +115,7 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
 
         {activeTab === 'personal' && (
           <div className="p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
               <User className="h-5 w-5 mr-2 text-gray-400" />
               Personal Information
             </h3>
@@ -139,21 +139,21 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
               <div className="sm:col-span-3">
                 <label className="block text-sm font-medium text-gray-700">Email</label>
                 <div className="mt-1 flex rounded-md shadow-sm">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">
+                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 sm:text-sm">
                     <Mail className="h-4 w-4" />
                   </span>
                   <input
                     type="email"
                     disabled
                     value={profile.email}
-                    className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md border-gray-300 bg-gray-100 text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm"
+                    className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md border-gray-300 bg-gray-100 text-gray-500 dark:text-gray-400 sm:text-sm"
                   />
                 </div>
               </div>
               <div className="sm:col-span-3">
                 <label className="block text-sm font-medium text-gray-700">Phone Number</label>
                 <div className="mt-1 flex rounded-md shadow-sm">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">
+                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 sm:text-sm">
                     <Phone className="h-4 w-4" />
                   </span>
                   <input
@@ -166,7 +166,7 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
               <div className="sm:col-span-6">
                 <label className="block text-sm font-medium text-gray-700">Address</label>
                 <div className="mt-1 flex rounded-md shadow-sm">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">
+                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 sm:text-sm">
                     <MapPin className="h-4 w-4" />
                   </span>
                   <input
@@ -179,7 +179,7 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
               <div className="sm:col-span-3">
                 <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
                 <div className="mt-1 flex rounded-md shadow-sm">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">
+                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 sm:text-sm">
                     <Calendar className="h-4 w-4" />
                   </span>
                   <input
@@ -196,7 +196,7 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
         {activeTab === 'id' && (
           <div className="p-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
                 <CreditCard className="h-5 w-5 mr-2 text-gray-400" />
                 Identification
               </h3>
@@ -208,7 +208,7 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
                     {...register('is_driver')}
                     className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                   />
-                  <label htmlFor="is_driver" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                  <label htmlFor="is_driver" className="ml-2 block text-sm text-gray-900 dark:text-white">
                     Is a Driver? (Requires Driver's License)
                   </label>
                 </div>
@@ -275,12 +275,12 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
                           <button
                             type="button"
                             onClick={() => handleFileUpload('id_front_url')}
-                            className="relative cursor-pointer bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-md font-medium text-primary hover:text-primary/80 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary"
+                            className="relative cursor-pointer bg-white dark:bg-gray-800 rounded-md font-medium text-primary hover:text-primary/80 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary"
                           >
                             <span>Upload a file</span>
                           </button>
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">PNG, JPG, PDF up to 10MB</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG, PDF up to 10MB</p>
                       </>
                     )}
                   </div>
@@ -310,12 +310,12 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
                           <button
                             type="button"
                             onClick={() => handleFileUpload('id_back_url')}
-                            className="relative cursor-pointer bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-md font-medium text-primary hover:text-primary/80 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary"
+                            className="relative cursor-pointer bg-white dark:bg-gray-800 rounded-md font-medium text-primary hover:text-primary/80 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary"
                           >
                             <span>Upload a file</span>
                           </button>
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">PNG, JPG, PDF up to 10MB</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG, PDF up to 10MB</p>
                       </>
                     )}
                   </div>
@@ -327,7 +327,7 @@ export default function StaffProfileDetails({ userId: propUserId }: Props) {
 
         {activeTab === 'banking' && (
           <div className="p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4">Banking Details</h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Banking Details</h3>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-gray-700">Banco</label>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search, Phone, Mail, User } from 'lucide-react';
 import { staffService } from '../../services/staffService';
@@ -16,14 +16,7 @@ export default function StaffList() {
 
   const { session, loading: authLoading } = useAuth();
 
-  useEffect(() => {
-    // Wait for auth to initialize and session to be available so requests are made as the authenticated user
-    if (!authLoading && session?.user) {
-      loadStaff();
-    }
-  }, [authLoading, session?.user?.id]);
-
-  const loadStaff = async () => {
+  const loadStaff = useCallback(async () => {
     try {
       const data = await staffService.getStaffMembers();
       setStaff(data);
@@ -33,7 +26,13 @@ export default function StaffList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && session?.user) {
+      void loadStaff();
+    }
+  }, [authLoading, session?.user, loadStaff]);
 
   const filteredStaff = staff.filter(member =>
     `${member.first_name} ${member.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -47,7 +46,7 @@ export default function StaffList() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Staff Management</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Staff Management</h1>
         <button
           onClick={() => setIsAddModalOpen(true)}
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
@@ -57,24 +56,24 @@ export default function StaffList() {
         </button>
       </div>
 
-      <div className="flex items-center px-4 py-3 bg-white dark:bg-gray-800 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 dark:border-gray-700 rounded-lg shadow-sm">
+      <div className="flex items-center px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
         <Search className="h-5 w-5 text-gray-400 mr-3" />
         <input
           type="text"
           placeholder="Search staff..."
-          className="flex-1 border-none focus:ring-0 text-gray-900 dark:text-white dark:text-white placeholder-gray-500"
+          className="flex-1 border-none focus:ring-0 text-gray-900 dark:text-white placeholder-gray-500"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </div>
 
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
         <ul className="divide-y divide-gray-200">
           {filteredStaff.map((member) => (
             <li key={member.id}>
               <div
                 onClick={() => navigate(`/staff/${member.user_id}`)}
-                className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 flex items-center justify-between cursor-pointer"
+                className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 flex items-center justify-between cursor-pointer"
               >
                 <div className="flex items-center min-w-0 flex-1">
                   <div className="flex-shrink-0 bg-pink-100 rounded-full p-3">
@@ -87,7 +86,7 @@ export default function StaffList() {
                     <p className="text-xs uppercase tracking-wide text-gray-400">
                       {member.is_driver ? 'Driver' : 'Staff'}
                     </p>
-                    <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 flex flex-wrap gap-x-4 gap-y-1">
+                    <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 flex flex-wrap gap-x-4 gap-y-1">
                       <span className="flex items-center">
                         <Mail className="h-4 w-4 mr-1 text-gray-400" />
                         <span className="truncate">{member.email}</span>
@@ -103,7 +102,7 @@ export default function StaffList() {
                 </div>
                 <Link
                   to={`/staff/${member.user_id}`}
-                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-primary bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-primary/10"
+                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-primary bg-white dark:bg-gray-800 hover:bg-primary/10"
                   onClick={(e) => e.stopPropagation()}
                 >
                   View Profile

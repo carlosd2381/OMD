@@ -108,6 +108,14 @@ export const taskService = {
         action: 'Task Created',
         details: `Task "${task.title}" created`,
       });
+      if (task.assigned_to) {
+        await activityLogService.logActivity({
+          entity_id: task.client_id,
+          entity_type: 'client',
+          action: 'Task Assigned',
+          details: `Task "${task.title}" assigned to ${task.assigned_to}`,
+        });
+      }
     } else if (task.venue_id) {
       await activityLogService.logActivity({
         entity_id: task.venue_id,
@@ -115,6 +123,14 @@ export const taskService = {
         action: 'Task Created',
         details: `Task "${task.title}" created`,
       });
+      if (task.assigned_to) {
+        await activityLogService.logActivity({
+          entity_id: task.venue_id,
+          entity_type: 'venue',
+          action: 'Task Assigned',
+          details: `Task "${task.title}" assigned to ${task.assigned_to}`,
+        });
+      }
     } else if (task.planner_id) {
       await activityLogService.logActivity({
         entity_id: task.planner_id,
@@ -122,12 +138,26 @@ export const taskService = {
         action: 'Task Created',
         details: `Task "${task.title}" created`,
       });
+      if (task.assigned_to) {
+        await activityLogService.logActivity({
+          entity_id: task.planner_id,
+          entity_type: 'planner',
+          action: 'Task Assigned',
+          details: `Task "${task.title}" assigned to ${task.assigned_to}`,
+        });
+      }
     }
 
     return mapToTask(data);
   },
 
   updateTask: async (id: string, updates: Partial<Task>): Promise<Task | undefined> => {
+    const { data: previousTask } = await supabase
+      .from('tasks')
+      .select('assigned_to')
+      .eq('id', id)
+      .maybeSingle();
+
     const dbUpdates: TaskUpdate = {
       title: updates.title,
       description: updates.description,
@@ -156,6 +186,14 @@ export const taskService = {
         action: updates.status === 'completed' ? 'Task Completed' : 'Task Updated',
         details: `Task "${updatedTask.title}" ${updates.status === 'completed' ? 'completed' : 'updated'}`,
       });
+      if (updates.assigned_to && updates.assigned_to !== previousTask?.assigned_to) {
+        await activityLogService.logActivity({
+          entity_id: updatedTask.client_id,
+          entity_type: 'client',
+          action: 'Task Assigned',
+          details: `Task "${updatedTask.title}" assigned to ${updates.assigned_to}`,
+        });
+      }
     } else if (updatedTask.venue_id) {
       await activityLogService.logActivity({
         entity_id: updatedTask.venue_id,
@@ -163,6 +201,14 @@ export const taskService = {
         action: updates.status === 'completed' ? 'Task Completed' : 'Task Updated',
         details: `Task "${updatedTask.title}" ${updates.status === 'completed' ? 'completed' : 'updated'}`,
       });
+      if (updates.assigned_to && updates.assigned_to !== previousTask?.assigned_to) {
+        await activityLogService.logActivity({
+          entity_id: updatedTask.venue_id,
+          entity_type: 'venue',
+          action: 'Task Assigned',
+          details: `Task "${updatedTask.title}" assigned to ${updates.assigned_to}`,
+        });
+      }
     } else if (updatedTask.planner_id) {
       await activityLogService.logActivity({
         entity_id: updatedTask.planner_id,
@@ -170,6 +216,14 @@ export const taskService = {
         action: updates.status === 'completed' ? 'Task Completed' : 'Task Updated',
         details: `Task "${updatedTask.title}" ${updates.status === 'completed' ? 'completed' : 'updated'}`,
       });
+      if (updates.assigned_to && updates.assigned_to !== previousTask?.assigned_to) {
+        await activityLogService.logActivity({
+          entity_id: updatedTask.planner_id,
+          entity_type: 'planner',
+          action: 'Task Assigned',
+          details: `Task "${updatedTask.title}" assigned to ${updates.assigned_to}`,
+        });
+      }
     }
 
     return updatedTask;

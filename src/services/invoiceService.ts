@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { activityLogService } from './activityLogService';
+import { activityLogService, formatNotificationActivityDetails } from './activityLogService';
 import { emailNotificationService } from './emailNotificationService';
 import type { Invoice } from '../types/invoice';
 
@@ -38,7 +38,17 @@ export const invoiceService = {
     return (data || []).map(mapToInvoice);
   },
 
-  updateStatus: async (id: string, status: Invoice['status']): Promise<Invoice | null> => {
+  updateStatus: async (
+    id: string,
+    status: Invoice['status'],
+    options?: { sendNotification?: boolean }
+  ): Promise<Invoice | null> => {
+    const { data: previousInvoice } = await supabase
+      .from('invoices')
+      .select('status')
+      .eq('id', id)
+      .maybeSingle();
+
     const { data, error } = await supabase
       .from('invoices')
       .update({
@@ -61,12 +71,34 @@ export const invoiceService = {
       details: `Invoice status updated to ${status}`,
     });
 
-    if (status === 'paid') {
+    const logNotificationActivity = async (action: string, details: string) => {
+      try {
+        await activityLogService.logActivity({
+          entity_id: updatedInvoice.client_id,
+          entity_type: 'client',
+          action,
+          details: formatNotificationActivityDetails(details, 'invoice', updatedInvoice.id),
+        });
+      } catch (logError) {
+        console.error('Failed to write invoice notification activity log:', logError);
+      }
+    };
+
+    const shouldNotifyInvoicePaid =
+      status === 'paid' &&
+      previousInvoice?.status !== 'paid' &&
+      options?.sendNotification !== false;
+
+    if (shouldNotifyInvoicePaid) {
       try {
         await emailNotificationService.sendInvoicePaidNotification(updatedInvoice);
+        await logNotificationActivity('Invoice Notification Sent', `Invoice paid email delivered for invoice ${updatedInvoice.id}`);
       } catch (notificationError) {
         console.error('Failed to send invoice notification email:', notificationError);
+        await logNotificationActivity('Invoice Notification Failed', `Invoice paid email failed for invoice ${updatedInvoice.id}`);
       }
+    } else if (status === 'paid') {
+      await logNotificationActivity('Invoice Notification Skipped', `Invoice paid email skipped for invoice ${updatedInvoice.id} (already paid or suppressed)`);
     }
 
     return updatedInvoice;

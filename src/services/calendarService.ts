@@ -3,14 +3,28 @@ import type { Event } from '../types/event';
 import type { Task } from '../types/task';
 
 export interface CalendarEvent extends Event {
-  type: 'event';
+  item_type: 'event';
+  client_name?: string;
+  secondary_client_name?: string;
 }
 
 export interface CalendarTask extends Task {
-  type: 'task';
+  item_type: 'task';
 }
 
 export type CalendarItem = CalendarEvent | CalendarTask;
+
+type CalendarEventWithVenue = Event & {
+  venues?: {
+    name?: string | null;
+  } | null;
+};
+
+type ClientNameRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+};
 
 export const calendarService = {
   async getCalendarItems(startDate: string, endDate: string): Promise<CalendarItem[]> {
@@ -26,7 +40,33 @@ export const calendarService = {
     if (eventsError) throw eventsError;
 
     if (events) {
-      items.push(...events.map((event: any) => ({
+      const typedEvents = events as CalendarEventWithVenue[];
+      const clientIds = Array.from(
+        new Set(
+          typedEvents
+            .flatMap((event) => [event.client_id, event.secondary_client_id])
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+
+      let clientNameMap = new Map<string, string>();
+      if (clientIds.length > 0) {
+        const { data: clients, error: clientsError } = await supabase
+          .from('clients')
+          .select('id, first_name, last_name')
+          .in('id', clientIds);
+
+        if (clientsError) throw clientsError;
+
+        clientNameMap = new Map(
+          ((clients || []) as ClientNameRow[]).map((client) => {
+            const fullName = [client.first_name, client.last_name].filter(Boolean).join(' ').trim();
+            return [client.id, fullName || 'Client'];
+          })
+        );
+      }
+
+      items.push(...typedEvents.map((event) => ({
         ...event,
         venue_id: event.venue_id || undefined,
         planner_id: event.planner_id || undefined,
@@ -35,7 +75,9 @@ export const calendarService = {
         notes: event.notes || undefined,
         updated_at: event.created_at, // Fallback since updated_at might be missing in DB response
         venue_name: event.venues?.name || event.venue_name,
-        type: 'event' as const
+        client_name: clientNameMap.get(event.client_id),
+        secondary_client_name: event.secondary_client_id ? clientNameMap.get(event.secondary_client_id) : undefined,
+        item_type: 'event' as const
       } as CalendarEvent)));
     }
 
@@ -60,7 +102,7 @@ export const calendarService = {
         assigned_to: task.assigned_to || undefined,
         completed_at: task.completed_at || undefined,
         completed_by: task.completed_by || undefined,
-        type: 'task' as const
+        item_type: 'task' as const
       } as CalendarTask)));
     }
 

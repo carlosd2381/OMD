@@ -10,9 +10,10 @@ import { formatCurrency } from '../utils/formatters';
 
 const DEFAULT_BRAND_NAME = 'Oh My Desserts MX';
 const NOTIFICATION_BASE_URL = (import.meta.env.VITE_NOTIFICATIONS_API_URL || '').replace(/\/$/, '');
+const FALLBACK_EMAIL_ENDPOINT = '/.netlify/functions/send-email';
 const EMAIL_ENDPOINT = NOTIFICATION_BASE_URL
   ? `${NOTIFICATION_BASE_URL}/notifications/email`
-  : '/.netlify/functions/send-email';
+  : FALLBACK_EMAIL_ENDPOINT;
 
 const getClientPortalUrl = (clientId: string) => {
   const baseUrl = import.meta.env.VITE_CLIENT_PORTAL_URL?.trim() || `${window.location.origin}/portal`;
@@ -185,22 +186,38 @@ const postEmail = async (message: EmailMessage, settings: EmailSettings) => {
     throw new Error('SMTP settings are incomplete.');
   }
 
-  const response = await fetch(EMAIL_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      smtpConfig,
-      sender: settings.sender_identity || {},
-      message: {
-        ...message,
-        html: applySignature(message.html, settings.signature)
-      }
-    })
+  const payload = JSON.stringify({
+    smtpConfig,
+    sender: settings.sender_identity || {},
+    message: {
+      ...message,
+      html: applySignature(message.html, settings.signature)
+    }
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(errText || 'Failed to send email notification.');
+  const requestEmail = async (endpoint: string) => {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(errText || 'Failed to send email notification.');
+    }
+  };
+
+  try {
+    await requestEmail(EMAIL_ENDPOINT);
+  } catch (primaryError) {
+    const canFallback = EMAIL_ENDPOINT !== FALLBACK_EMAIL_ENDPOINT;
+    if (!canFallback) {
+      throw primaryError;
+    }
+
+    console.warn('Primary email endpoint failed; trying fallback endpoint.', primaryError);
+    await requestEmail(FALLBACK_EMAIL_ENDPOINT);
   }
 };
 
@@ -334,7 +351,11 @@ export const emailNotificationService = {
     }, settings);
   },
 
-  async sendManualQuoteEmail(quote: Quote, recipient: { email: string; name: string }) {
+  async sendManualQuoteEmail(
+    quote: Quote,
+    recipient: { email: string; name: string },
+    options?: { isClientRecipient?: boolean; portalSetupLink?: string | null; loginEmail?: string }
+  ) {
     const [settings, branding] = await Promise.all([loadEmailSettings(), loadBranding()]);
     
     // We don't check shouldSendEmail because this is a manual action, but we need settings
@@ -348,6 +369,17 @@ export const emailNotificationService = {
     // But manual send might be to 'other' role without ID.
     // However, if we are in manual send, quote.client_id should exist.
     const portalUrl = getClientPortalUrl(quote.client_id);
+    const isClientRecipient = options?.isClientRecipient ?? false;
+    const portalSetupLink = options?.portalSetupLink || null;
+    const loginEmail = options?.loginEmail || recipient.email;
+    const ctaLabel = portalSetupLink ? 'Set Password & View Quote' : 'View Quote';
+    const ctaUrl = portalSetupLink || portalUrl;
+
+    const portalHelpText = isClientRecipient
+      ? portalSetupLink
+        ? `Portal login email: <strong>${loginEmail}</strong><br/>This one-time link lets you set your password immediately. After that, use your email + new password to sign in anytime.`
+        : `Portal login email: <strong>${loginEmail}</strong><br/>If this is your first portal visit and you do not have a password yet, click "Forgot your password?" on the login page using this same email address.`
+      : 'This link opens the client portal. If you need direct access, please contact our team.';
 
     const html = buildEmailTemplate({
       greeting: `Hi ${recipient.name},`,
@@ -355,10 +387,10 @@ export const emailNotificationService = {
         ? `Your quote for ${event.name} is ready to review.`
         : 'Your quote is ready to review.',
       detailRows: buildQuoteDetails(quote, event),
-      ctaLabel: 'View Quote',
-      ctaUrl: portalUrl,
+      ctaLabel,
+      ctaUrl,
       closing: `Warmly,<br/>${brandName}`,
-      footer: 'You can reply directly to this email with any questions.'
+      footer: `${portalHelpText}<br/><br/>You can reply directly to this email with any questions.`
     });
 
     await postEmail({

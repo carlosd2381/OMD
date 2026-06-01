@@ -8,6 +8,12 @@ export interface DashboardStats {
   pendingTasks: number;
 }
 
+type EventWithVenue = Event & {
+  venues?: {
+    name?: string | null;
+  } | null;
+};
+
 export const dashboardService = {
   async getStats(): Promise<DashboardStats> {
     // New Leads
@@ -88,7 +94,8 @@ export const dashboardService = {
 
     if (error) throw error;
 
-    return (data || []).map((event: any) => ({
+    const typedEvents = (data || []) as EventWithVenue[];
+    return typedEvents.map((event) => ({
       ...event,
       client_id: event.client_id,
       secondary_client_id: event.secondary_client_id || undefined,
@@ -116,7 +123,8 @@ export const dashboardService = {
 
     if (error) throw error;
 
-    return (data || []).map((event: any) => ({
+    const typedEvents = (data || []) as EventWithVenue[];
+    return typedEvents.map((event) => ({
       ...event,
       client_id: event.client_id,
       secondary_client_id: event.secondary_client_id || undefined,

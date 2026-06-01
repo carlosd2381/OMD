@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, Search, Edit2, Trash2, Copy, 
@@ -75,12 +75,7 @@ export default function TemplateSettings() {
     },
   });
 
-  useEffect(() => {
-    loadTemplates();
-    loadTokens();
-  }, [activeTab]);
-
-  const loadTokens = async () => {
+  const loadTokens = useCallback(async () => {
     try {
       const customTokens = await settingsService.getTokens();
       
@@ -97,9 +92,9 @@ export default function TemplateSettings() {
     } catch (error) {
       console.error('Error loading tokens:', error);
     }
-  };
+  }, []);
 
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
     try {
       const data = await templateService.getTemplates(activeTab);
       setTemplates(data);
@@ -107,7 +102,18 @@ export default function TemplateSettings() {
       console.error('Error loading templates:', error);
       toast.error('Failed to load templates');
     }
-  };
+  }, [activeTab]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadTemplates();
+      void loadTokens();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [loadTemplates, loadTokens]);
 
   const filteredTemplates = templates.filter(t => 
     t.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -274,13 +280,13 @@ export default function TemplateSettings() {
               onClick={() => setIsEditorOpen(false)}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
-              <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+              <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
             </button>
             <div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white dark:text-white">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                 {currentTemplate ? 'Edit Template' : 'New Template'}
               </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 capitalize">{activeTab} Template</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{activeTab} Template</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">
@@ -329,12 +335,12 @@ export default function TemplateSettings() {
 
         {/* Conditional Editor: Questionnaire Builder vs RTE */}
         {activeTab === 'questionnaire' ? (
-          <div className="flex-1 border rounded-md bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-6 overflow-y-auto">
+          <div className="flex-1 border rounded-md bg-gray-50 dark:bg-gray-700 p-6 overflow-y-auto">
             <div className="space-y-4 max-w-3xl mx-auto">
               {questions.map((q, index) => (
-                <div key={q.id} className="bg-white dark:bg-gray-800 dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 dark:border-gray-700 relative group">
+                <div key={q.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 relative group">
                   <div className="absolute right-4 top-4">
-                    <button onClick={() => removeQuestion(q.id)} className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-white dark:bg-gray-800 dark:bg-gray-800 border border-gray-300 rounded hover:bg-red-50">
+                    <button onClick={() => removeQuestion(q.id)} className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-white dark:bg-gray-800 border border-gray-300 rounded hover:bg-red-50">
                       <Trash2 className="h-3 w-3 mr-1" />
                       Delete
                     </button>
@@ -342,7 +348,7 @@ export default function TemplateSettings() {
                   
                   <div className="flex items-center mb-4">
                     <GripVertical className="h-5 w-5 text-gray-300 mr-2 cursor-move" />
-                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 mr-2">Q{index + 1}</span>
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400 mr-2">Q{index + 1}</span>
                     <select
                       value={q.type}
                       onChange={(e) => updateQuestion(q.id, { type: e.target.value as QuestionType })}
@@ -386,7 +392,7 @@ export default function TemplateSettings() {
                           onChange={(e) => updateQuestion(q.id, { required: e.target.checked })}
                           className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                         />
-                        <label className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">Required</label>
+                        <label className="ml-2 block text-sm text-gray-900 dark:text-white">Required</label>
                       </div>
                     )}
                   </div>
@@ -394,7 +400,7 @@ export default function TemplateSettings() {
                   <div className="space-y-3">
                     <div className="flex space-x-4">
                       <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">
+                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                           {['headline', 'section', 'paragraph'].includes(q.type) ? 'Content Text' : 'Label / Question'}
                         </label>
                         {q.type === 'paragraph' ? (
@@ -420,7 +426,7 @@ export default function TemplateSettings() {
                       
                       {!['headline', 'section', 'paragraph', 'checkbox', 'radio', 'select', 'segmented', 'likert', 'privacy', 'upload'].includes(q.type) && (
                         <div className="w-1/3">
-                          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">Placeholder</label>
+                          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Placeholder</label>
                           <input
                             type="text"
                             value={q.placeholder || ''}
@@ -434,7 +440,7 @@ export default function TemplateSettings() {
 
                     {!['headline', 'section', 'paragraph'].includes(q.type) && (
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">Link to System Token (Optional)</label>
+                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Link to System Token (Optional)</label>
                         <select
                           value={q.linkedToken || ''}
                           onChange={(e) => updateQuestion(q.id, { linkedToken: e.target.value })}
@@ -451,7 +457,7 @@ export default function TemplateSettings() {
                     
                     {['select', 'radio', 'checkbox', 'segmented'].includes(q.type) && (
                       <div className="pl-4 border-l-2 border-gray-100">
-                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">Options (comma separated)</label>
+                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Options (comma separated)</label>
                         <input
                           type="text"
                           value={q.options?.join(', ') || ''}
@@ -465,7 +471,7 @@ export default function TemplateSettings() {
                     {q.type === 'likert' && (
                       <div className="pl-4 border-l-2 border-gray-100 space-y-3">
                         <div>
-                          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">Columns (Scale)</label>
+                          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Columns (Scale)</label>
                           <input
                             type="text"
                             value={q.options?.join(', ') || ''}
@@ -475,7 +481,7 @@ export default function TemplateSettings() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">Rows (Statements)</label>
+                          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Rows (Statements)</label>
                           <textarea
                             rows={3}
                             value={q.rows?.join('\n') || ''}
@@ -489,7 +495,7 @@ export default function TemplateSettings() {
 
                     {q.type === 'privacy' && (
                       <div className="pl-4 border-l-2 border-gray-100">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 italic">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 italic">
                           This field will render as a checkbox with the label text above. Use the label for your privacy policy disclaimer.
                         </p>
                       </div>
@@ -500,7 +506,7 @@ export default function TemplateSettings() {
               
               <button
                 onClick={addQuestion}
-                className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:border-primary hover:text-primary transition-colors flex items-center justify-center font-medium"
+                className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 dark:text-gray-400 hover:border-primary hover:text-primary transition-colors flex items-center justify-center font-medium"
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Add Question
@@ -571,7 +577,7 @@ export default function TemplateSettings() {
                   <span>Insert Token</span>
                   <ChevronDown className="h-3 w-3" />
                 </button>
-                <div className="absolute left-0 mt-1 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50 hidden group-hover:block">
+                <div className="absolute left-0 mt-1 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50 hidden group-hover:block">
                   <div className="py-1" role="menu">
                     {availableTokens.map((token) => (
                       <button
@@ -596,19 +602,19 @@ export default function TemplateSettings() {
 
         {/* AI Modal */}
         {isAiModalOpen && (
-          <div className="fixed inset-0 bg-gray-50 dark:bg-gray-700 dark:bg-gray-7000 bg-opacity-75 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+          <div className="fixed inset-0 bg-gray-50 dark:bg-gray-7000 bg-opacity-75 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white flex items-center">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
                   <Sparkles className="h-5 w-5 text-purple-500 mr-2" />
                   AI Writing Assistant
                 </h3>
-                <button onClick={() => setIsAiModalOpen(false)} className="text-gray-400 hover:text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                <button onClick={() => setIsAiModalOpen(false)} className="text-gray-400 hover:text-gray-500 dark:text-gray-400">
                   <X className="h-5 w-5" />
                 </button>
               </div>
               <div className="space-y-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   {activeTab === 'questionnaire' 
                     ? "Describe the questionnaire you need, and I'll generate questions for you."
                     : "Describe what you want to write, and I'll generate a draft for you."}
@@ -623,7 +629,7 @@ export default function TemplateSettings() {
                 <div className="flex justify-end space-x-3">
                   <button
                     onClick={() => setIsAiModalOpen(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700"
                   >
                     Cancel
                   </button>
@@ -651,11 +657,11 @@ export default function TemplateSettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Templates</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Manage your document and email templates.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Templates</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Manage your document and email templates.</p>
           </div>
         </div>
         <button
@@ -668,7 +674,7 @@ export default function TemplateSettings() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+      <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex space-x-8 overflow-x-auto">
           {[
             { id: 'email', label: 'Emails', icon: Mail },
@@ -683,7 +689,7 @@ export default function TemplateSettings() {
               className={`${
                 activeTab === tab.id
                   ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
             >
               <tab.icon className="h-4 w-4 mr-2" />
@@ -694,8 +700,8 @@ export default function TemplateSettings() {
       </div>
 
       {/* Search and List */}
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="max-w-md relative rounded-md shadow-sm">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-5 w-5 text-gray-400" />
@@ -713,7 +719,7 @@ export default function TemplateSettings() {
         <ul className="divide-y divide-gray-200">
           {filteredTemplates.length > 0 ? (
             filteredTemplates.map((template) => (
-              <li key={template.id} className="hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+              <li key={template.id} className="hover:bg-gray-50 dark:bg-gray-700">
                 <div className="px-4 py-4 sm:px-6 flex items-center justify-between">
                   <div className="flex items-center">
                     <div className="shrink-0">
@@ -727,7 +733,7 @@ export default function TemplateSettings() {
                     </div>
                     <div className="ml-4">
                       <h3 className="text-sm font-medium text-primary">{template.name}</h3>
-                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1">
+                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 mt-1">
                         <span className="truncate">Last modified: {template.lastModified}</span>
                         {template.subject && (
                           <>
@@ -741,7 +747,7 @@ export default function TemplateSettings() {
                   <div className="flex space-x-2">
                     <button 
                       onClick={() => handleEdit(template)}
-                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                       title="Edit"
                     >
                       <Edit2 className="h-4 w-4 mr-1" />
@@ -761,7 +767,7 @@ export default function TemplateSettings() {
                           toast.error('Failed to duplicate template');
                         }
                       }}
-                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                       title="Duplicate"
                     >
                       <Copy className="h-4 w-4 mr-1" />
@@ -769,7 +775,7 @@ export default function TemplateSettings() {
                     </button>
                     <button 
                       onClick={() => handleDelete(template.id)}
-                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                       title="Delete"
                     >
                       <Trash2 className="h-4 w-4 mr-1" />
@@ -780,7 +786,7 @@ export default function TemplateSettings() {
               </li>
             ))
           ) : (
-            <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">
+            <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
               No templates found. Create one to get started.
             </li>
           )}

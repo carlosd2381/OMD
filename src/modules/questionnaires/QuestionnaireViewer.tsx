@@ -8,10 +8,18 @@ import { buildDocSequenceMap, buildEventSequenceMap, buildEventsMap, resolveDocu
 import type { Questionnaire } from '../../types/questionnaire';
 import BookingQuestionnaire from './BookingQuestionnaire';
 
+type QuestionnaireViewerEvent = {
+  date?: string;
+};
+
+type QuestionnaireWithRelations = Questionnaire & {
+  event?: QuestionnaireViewerEvent;
+};
+
 export default function QuestionnaireViewer() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [questionnaire, setQuestionnaire] = useState<Questionnaire | null>(null);
+  const [questionnaire, setQuestionnaire] = useState<QuestionnaireWithRelations | null>(null);
   const [loading, setLoading] = useState(true);
   const [documentId, setDocumentId] = useState('');
 
@@ -27,7 +35,7 @@ export default function QuestionnaireViewer() {
       if (error) {
         console.error('Error fetching questionnaire:', error);
       } else {
-        const typedQuestionnaire = data as unknown as Questionnaire;
+        const typedQuestionnaire = data as unknown as QuestionnaireWithRelations;
         setQuestionnaire(typedQuestionnaire);
 
         const [eventsList, questionnaireScope] = await Promise.all([
@@ -55,17 +63,17 @@ export default function QuestionnaireViewer() {
       <div className="mb-6">
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700"
+          className="flex items-center text-gray-500 dark:text-gray-400 hover:text-gray-700"
         >
           <ArrowLeft className="h-5 w-5 mr-2" />
           Back
         </button>
       </div>
       
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg overflow-hidden">
-        <div className="px-4 py-5 sm:px-6 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 flex justify-between items-center">
-          <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">
-            {documentId || formatDocumentID('QST', (questionnaire as any).event?.date || questionnaire.created_at)} - {questionnaire.title}
+      <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg overflow-hidden">
+        <div className="px-4 py-5 sm:px-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+          <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">
+            {documentId || formatDocumentID('QST', questionnaire.event?.date || questionnaire.created_at)} - {questionnaire.title}
           </h3>
           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
             questionnaire.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
@@ -78,16 +86,16 @@ export default function QuestionnaireViewer() {
           {/* For now, we assume all questionnaires are Booking Questionnaires or fallback to it */}
           <BookingQuestionnaire embedded={true} eventId={questionnaire.event_id} />
           
-          <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700 dark:border-gray-700">
-            <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white">System Details</h4>
+          <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white">System Details</h4>
             <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Created At</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{new Date(questionnaire.created_at).toLocaleDateString()}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Created At</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{new Date(questionnaire.created_at).toLocaleDateString()}</dd>
               </div>
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Due Date</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{questionnaire.due_date || 'N/A'}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Due Date</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{questionnaire.due_date || 'N/A'}</dd>
               </div>
             </dl>
           </div>

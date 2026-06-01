@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,10 +12,72 @@ import { ArrowLeft, Plus, Trash2, User, MapPin } from 'lucide-react';
 // Declare Google Maps types
 declare global {
   interface Window {
-    google: any;
+    google: GoogleMapsApi;
     initMap: () => void;
   }
 }
+
+type GoogleMapsDistanceResponse = {
+  rows: Array<{
+    elements: Array<{
+      status: string;
+      distance: { value: number };
+      duration: { value: number };
+    }>;
+  }>;
+};
+
+type GoogleMapsApi = {
+  maps: {
+    places: {
+      Autocomplete: new (
+        input: HTMLInputElement,
+        options: { fields: string[]; types: string[] }
+      ) => {
+        addListener: (eventName: 'place_changed', callback: () => void) => void;
+        getPlace: () => {
+          geometry?: { location?: { lat: () => number; lng: () => number } };
+          name?: string;
+          place_id?: string;
+          url?: string;
+          website?: string;
+          formatted_phone_number?: string;
+          formatted_address?: string;
+          address_components?: Array<{ types: string[]; long_name: string }>;
+        };
+      };
+      AutocompleteService: new () => {
+        getPlacePredictions: (
+          request: { input: string; types: string[] },
+          callback: (
+            predictions: Array<{
+              structured_formatting: {
+                main_text: string;
+                secondary_text?: string;
+              };
+            }> | null,
+            status: string
+          ) => void
+        ) => void;
+      };
+      PlacesServiceStatus: {
+        OK: string;
+      };
+    };
+    DistanceMatrixService: new () => {
+      getDistanceMatrix: (
+        request: {
+          origins: string[];
+          destinations: Array<string | { lat: number; lng: number }>;
+          travelMode: string;
+          unitSystem: unknown;
+        },
+        callback: (response: GoogleMapsDistanceResponse, status: string) => void
+      ) => void;
+    };
+    UnitSystem: { METRIC: unknown };
+  };
+};
 
 const venueSchema = z.object({
   name: z.string().min(1, 'Venue name is required'),
@@ -76,12 +138,39 @@ export default function VenueForm() {
     resolver: zodResolver(contactSchema),
   });
 
-  useEffect(() => {
-    if (isEditMode) {
-      loadVenue();
-      loadContacts();
+  const loadVenue = useCallback(async () => {
+    try {
+      setLoading(true);
+      const venue = await venueService.getVenue(id!);
+      if (venue) {
+        reset(venue);
+      } else {
+        toast.error('Venue not found');
+        navigate('/venues');
+      }
+    } catch (error) {
+      toast.error('Failed to load venue');
+    } finally {
+      setLoading(false);
+    }
+  }, [id, navigate, reset]);
+
+  const loadContacts = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await venueService.getVenueContacts(id);
+      setContacts(data);
+    } catch (error) {
+      toast.error('Failed to load contacts');
     }
   }, [id]);
+
+  useEffect(() => {
+    if (isEditMode && id) {
+      void loadVenue();
+      void loadContacts();
+    }
+  }, [isEditMode, id, loadVenue, loadContacts]);
 
   useEffect(() => {
     const initMaps = async () => {
@@ -94,9 +183,10 @@ export default function VenueForm() {
       try {
         await loadGoogleMaps(apiKey);
         
-        if (!nameInputRef.current || !window.google) return;
+        const googleApi = window.google as GoogleMapsApi | null;
+        if (!nameInputRef.current || !googleApi) return;
 
-        const autocomplete = new window.google.maps.places.Autocomplete(nameInputRef.current, {
+        const autocomplete = new googleApi.maps.places.Autocomplete(nameInputRef.current, {
           fields: ['address_components', 'geometry', 'name', 'formatted_address', 'website', 'formatted_phone_number', 'place_id', 'url'],
           types: ['establishment', 'geocode'],
         });
@@ -155,15 +245,15 @@ export default function VenueForm() {
 
           // Calculate distance if HQ location is available
           if (hqLocation && place.formatted_address) {
-            const service = new window.google.maps.DistanceMatrixService();
+            const service = new googleApi.maps.DistanceMatrixService();
             service.getDistanceMatrix(
               {
                 origins: [hqLocation],
                 destinations: [place.formatted_address],
                 travelMode: 'DRIVING',
-                unitSystem: window.google.maps.UnitSystem.METRIC,
+                unitSystem: googleApi.maps.UnitSystem.METRIC,
               },
-              (response: any, status: any) => {
+              (response: GoogleMapsDistanceResponse, status: string) => {
                 if (status === 'OK' && response.rows[0].elements[0].status === 'OK') {
                   const element = response.rows[0].elements[0];
                   const distanceKm = element.distance.value / 1000;
@@ -183,33 +273,6 @@ export default function VenueForm() {
 
     initMaps();
   }, [hqLocation, setValue]);
-
-  const loadVenue = async () => {
-    try {
-      setLoading(true);
-      const venue = await venueService.getVenue(id!);
-      if (venue) {
-        reset(venue);
-      } else {
-        toast.error('Venue not found');
-        navigate('/venues');
-      }
-    } catch (error) {
-      toast.error('Failed to load venue');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadContacts = async () => {
-    if (!id) return;
-    try {
-      const data = await venueService.getVenueContacts(id);
-      setContacts(data);
-    } catch (error) {
-      toast.error('Failed to load contacts');
-    }
-  };
 
   const onSubmit = async (data: VenueFormData) => {
     try {
@@ -273,9 +336,9 @@ export default function VenueForm() {
             onClick={() => navigate('/venues')}
             className="p-2 rounded-full hover:bg-gray-100"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             {isEditMode ? 'Edit Venue' : 'New Venue'}
           </h1>
         </div>
@@ -283,14 +346,14 @@ export default function VenueForm() {
 
       {/* Tabs */}
       {isEditMode && (
-        <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+        <div className="border-b border-gray-200 dark:border-gray-700">
           <nav className="-mb-px flex space-x-8" aria-label="Tabs">
             <button
               onClick={() => setActiveTab('details')}
               className={`${
                 activeTab === 'details'
                   ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
               Details
@@ -300,7 +363,7 @@ export default function VenueForm() {
               className={`${
                 activeTab === 'contacts'
                   ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
               Contacts
@@ -311,7 +374,7 @@ export default function VenueForm() {
 
       {/* Details Tab */}
       <div className={activeTab === 'details' ? 'block' : 'hidden'}>
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow px-4 py-5 sm:rounded-lg sm:p-6">
+        <div className="bg-white dark:bg-gray-800 shadow px-4 py-5 sm:rounded-lg sm:p-6">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
               <div className="sm:col-span-6">
@@ -451,7 +514,7 @@ export default function VenueForm() {
                     id="travel_distance_km"
                     {...register('travel_distance_km', { valueAsNumber: true })}
                     readOnly
-                    className="shadow-sm bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 block w-full sm:text-sm border-gray-300 rounded-md"
+                    className="shadow-sm bg-gray-50 dark:bg-gray-700 block w-full sm:text-sm border-gray-300 rounded-md"
                   />
                 </div>
               </div>
@@ -466,7 +529,7 @@ export default function VenueForm() {
                     id="travel_time_mins"
                     {...register('travel_time_mins', { valueAsNumber: true })}
                     readOnly
-                    className="shadow-sm bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 block w-full sm:text-sm border-gray-300 rounded-md"
+                    className="shadow-sm bg-gray-50 dark:bg-gray-700 block w-full sm:text-sm border-gray-300 rounded-md"
                   />
                 </div>
               </div>
@@ -481,7 +544,7 @@ export default function VenueForm() {
                     id="map_url"
                     {...register('map_url')}
                     readOnly
-                    className="focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                    className="focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md bg-gray-50 dark:bg-gray-700"
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                     <MapPin className="h-5 w-5 text-gray-400" aria-hidden="true" />
@@ -588,7 +651,7 @@ export default function VenueForm() {
               <button
                 type="button"
                 onClick={() => navigate('/venues')}
-                className="bg-white dark:bg-gray-800 dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                className="bg-white dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
               >
                 Cancel
               </button>
@@ -606,12 +669,12 @@ export default function VenueForm() {
 
       {/* Contacts Tab */}
       <div className={activeTab === 'contacts' ? 'block' : 'hidden'}>
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <div className="sm:flex sm:items-center">
               <div className="sm:flex-auto">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Venue Contacts</h3>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Venue Contacts</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                   A list of all contacts associated with this venue including their role and contact information.
                 </p>
               </div>
@@ -631,18 +694,18 @@ export default function VenueForm() {
                 <div className="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
                   <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
                     <table className="min-w-full divide-y divide-gray-300">
-                      <thead className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-700">
                         <tr>
-                          <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 dark:text-white dark:text-white sm:pl-6">
+                          <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 dark:text-white sm:pl-6">
                             Name
                           </th>
-                          <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-white dark:text-white">
+                          <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-white">
                             Role
                           </th>
-                          <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-white dark:text-white">
+                          <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-white">
                             Email
                           </th>
-                          <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-white dark:text-white">
+                          <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-white">
                             Phone
                           </th>
                           <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6">
@@ -650,10 +713,10 @@ export default function VenueForm() {
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200 bg-white dark:bg-gray-800 dark:bg-gray-800">
+                      <tbody className="divide-y divide-gray-200 bg-white dark:bg-gray-800">
                         {contacts.map((contact) => (
                           <tr key={contact.id}>
-                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 dark:text-white dark:text-white sm:pl-6">
+                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 dark:text-white sm:pl-6">
                               {contact.first_name} {contact.last_name}
                               {contact.is_primary && (
                                 <span className="ml-2 inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
@@ -661,9 +724,9 @@ export default function VenueForm() {
                                 </span>
                               )}
                             </td>
-                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{contact.role}</td>
-                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{contact.email}</td>
-                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{contact.phone}</td>
+                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">{contact.role}</td>
+                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">{contact.email}</td>
+                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">{contact.phone}</td>
                             <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                               <button
                                 onClick={() => handleDeleteContact(contact.id)}
@@ -676,7 +739,7 @@ export default function VenueForm() {
                         ))}
                         {contacts.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="py-4 text-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                            <td colSpan={5} className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                               No contacts added yet.
                             </td>
                           </tr>
@@ -695,17 +758,17 @@ export default function VenueForm() {
       {isContactModalOpen && (
         <div className="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-gray-50 dark:bg-gray-700 dark:bg-gray-7000 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={() => setIsContactModalOpen(false)}></div>
+            <div className="fixed inset-0 bg-gray-50 dark:bg-gray-7000 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={() => setIsContactModalOpen(false)}></div>
 
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
-            <div className="inline-block align-bottom bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+            <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
               <div>
                 <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-pink-100">
                   <User className="h-6 w-6 text-primary" />
                 </div>
                 <div className="mt-3 text-center sm:mt-5">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white" id="modal-title">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white" id="modal-title">
                     Add Venue Contact
                   </h3>
                   <div className="mt-2">
@@ -768,12 +831,12 @@ export default function VenueForm() {
                           {...registerContact('is_primary')}
                           className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                         />
-                        <label htmlFor="is_primary" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                        <label htmlFor="is_primary" className="ml-2 block text-sm text-gray-900 dark:text-white">
                           Set as Primary Contact
                         </label>
                       </div>
 
-                      <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+                      <div className="mt-5 sm:mt-6 sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
                         <button
                           type="submit"
                           className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary text-base font-medium text-white hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:col-start-2 sm:text-sm"
@@ -783,7 +846,7 @@ export default function VenueForm() {
                         <button
                           type="button"
                           onClick={() => setIsContactModalOpen(false)}
-                          className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 dark:bg-gray-800 text-base font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:mt-0 sm:col-start-1 sm:text-sm"
+                          className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:mt-0 sm:col-start-1 sm:text-sm"
                         >
                           Cancel
                         </button>

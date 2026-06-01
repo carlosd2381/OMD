@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Save, Printer, FileText } from 'lucide-react';
 import { runSheetService } from '../../services/runSheetService';
@@ -19,6 +19,9 @@ interface RunSheetTabProps {
   venue: Venue | null;
 }
 
+const OPERATOR_NUMBERS = [1, 2, 3, 4, 5, 6] as const;
+type OperatorField = `operator_${typeof OPERATOR_NUMBERS[number]}`;
+
 export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
   const [loading, setLoading] = useState(false);
   const [client, setClient] = useState<Client | null>(null);
@@ -29,20 +32,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
 
   const { register, handleSubmit, reset, setValue } = useForm<RunSheet>();
 
-  useEffect(() => {
-    loadData();
-
-    // Listen for staff assignment changes from the Event Staff tab
-    const handler = (e: any) => {
-      console.debug('[RunSheetTab] received staff_assignments:updated', e?.detail);
-      if (e?.detail?.eventId === event.id) loadData();
-    };
-    window.addEventListener('staff_assignments:updated', handler as any);
-
-    return () => window.removeEventListener('staff_assignments:updated', handler as any);
-  }, [event.id]);
-
-  const calculateDefaultTimes = () => {
+  const calculateDefaultTimes = useCallback(() => {
     if (!venue?.travel_time_mins) return {};
 
     const travelTime = Math.ceil(venue.travel_time_mins);
@@ -79,9 +69,9 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
       leave_time: formatTime(leaveOffset),
       meet_load_time: formatTime(meetOffset),
     };
-  };
+  }, [event.date, venue?.travel_time_mins]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -150,9 +140,32 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    calculateDefaultTimes,
+    event.client_id,
+    event.id,
+    event.planner_id,
+    event.venue_contact_id,
+    reset,
+    setValue,
+  ]);
 
-  const onSubmit = async (data: any) => {
+  useEffect(() => {
+    loadData();
+
+    const handler = (e: globalThis.Event) => {
+      const customEvent = e as unknown as CustomEvent<{ eventId?: string }>;
+      console.debug('[RunSheetTab] received staff_assignments:updated', customEvent.detail);
+      if (customEvent.detail?.eventId === event.id) {
+        loadData();
+      }
+    };
+    window.addEventListener('staff_assignments:updated', handler as EventListener);
+
+    return () => window.removeEventListener('staff_assignments:updated', handler as EventListener);
+  }, [event.id, loadData]);
+
+  const onSubmit = async (data: RunSheet) => {
     try {
       setLoading(true);
       const payload = {
@@ -241,7 +254,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
       <div className="flex justify-end space-x-3 no-print">
         <button
           onClick={handleGeneratePDF}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none"
+          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none"
         >
           <Printer className="h-4 w-4 mr-2" />
           Generate PDF
@@ -255,39 +268,39 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
         </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg print:shadow-none">
-        <div className="px-4 py-5 sm:px-6 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 print:bg-white dark:bg-gray-800 dark:bg-gray-800">
-          <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Event Run Sheet</h3>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Operational details for the event crew.</p>
+      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg print:shadow-none">
+        <div className="px-4 py-5 sm:px-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 print:bg-white dark:bg-gray-800">
+          <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Event Run Sheet</h3>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Operational details for the event crew.</p>
         </div>
 
         <div className="px-4 py-5 sm:p-6 space-y-8">
           {/* Venue Details */}
           <section>
-            <h4 className="text-md font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+            <h4 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center">
               <FileText className="h-4 w-4 mr-2 text-gray-400" />
               Venue Details
             </h4>
-            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-md print:bg-white dark:bg-gray-800 dark:bg-gray-800 print:border print:border-gray-200 dark:border-gray-700 dark:border-gray-700">
+            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2 bg-gray-50 dark:bg-gray-700 p-4 rounded-md print:bg-white dark:bg-gray-800 print:border-gray-200 dark:border-gray-700">
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Venue Name</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{venue?.name || 'N/A'}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Venue Name</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{venue?.name || 'N/A'}</dd>
               </div>
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Venue Area</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{venue?.venue_area || 'N/A'}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Venue Area</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{venue?.venue_area || 'N/A'}</dd>
               </div>
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Address</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{venue?.address || 'N/A'}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Address</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{venue?.address || 'N/A'}</dd>
               </div>
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Venue Contact</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Venue Contact</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">
                   {venueContact ? (
                     <span>
                       {venueContact.first_name} {venueContact.last_name}
-                      {venueContact.phone && <span className="ml-2 text-gray-500 dark:text-gray-400 dark:text-gray-400">{venueContact.phone}</span>}
+                      {venueContact.phone && <span className="ml-2 text-gray-500 dark:text-gray-400">{venueContact.phone}</span>}
                     </span>
                   ) : (
                     venue?.phone || venue?.email || 'N/A'
@@ -299,38 +312,38 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
 
           {/* External Planner */}
           <section>
-            <h4 className="text-md font-medium text-gray-900 dark:text-white dark:text-white mb-4">External Planner</h4>
-            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-3 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-md print:bg-white dark:bg-gray-800 dark:bg-gray-800 print:border print:border-gray-200 dark:border-gray-700 dark:border-gray-700">
+            <h4 className="text-md font-medium text-gray-900 dark:text-white mb-4">External Planner</h4>
+            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-3 bg-gray-50 dark:bg-gray-700 p-4 rounded-md print:bg-white dark:bg-gray-800 print:border-gray-200 dark:border-gray-700">
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Name</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{planner?.first_name} {planner?.last_name || 'N/A'}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Name</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{planner?.first_name} {planner?.last_name || 'N/A'}</dd>
               </div>
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Phone</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{planner?.phone || 'N/A'}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{planner?.phone || 'N/A'}</dd>
               </div>
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Email</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{planner?.email || 'N/A'}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{planner?.email || 'N/A'}</dd>
               </div>
             </div>
           </section>
 
           {/* Client Details */}
           <section>
-            <h4 className="text-md font-medium text-gray-900 dark:text-white dark:text-white mb-4">Client Details</h4>
-            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-md print:bg-white dark:bg-gray-800 dark:bg-gray-800 print:border print:border-gray-200 dark:border-gray-700 dark:border-gray-700">
+            <h4 className="text-md font-medium text-gray-900 dark:text-white mb-4">Client Details</h4>
+            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2 bg-gray-50 dark:bg-gray-700 p-4 rounded-md print:bg-white dark:bg-gray-800 print:border-gray-200 dark:border-gray-700">
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Client 1</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Client 1</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">
                   {client?.first_name} {client?.last_name} <br/>
-                  <span className="text-gray-500 dark:text-gray-400 dark:text-gray-400 text-xs">{client?.email} • {client?.phone}</span>
+                  <span className="text-gray-500 dark:text-gray-400 text-xs">{client?.email} • {client?.phone}</span>
                 </dd>
               </div>
               {/* Placeholder for Client 2 if data model supports it */}
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Client 2</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Client 2</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">
                   {event.secondary_client_id ? 'Secondary Client Info' : 'N/A'}
                 </dd>
               </div>
@@ -339,15 +352,15 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
 
           {/* Event Schedule */}
           <section>
-            <h4 className="text-md font-medium text-gray-900 dark:text-white dark:text-white mb-4">Event Schedule</h4>
+            <h4 className="text-md font-medium text-gray-900 dark:text-white mb-4">Event Schedule</h4>
             <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Event Date</label>
-                <div className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white font-medium">{event.date}</div>
+                <div className="mt-1 text-sm text-gray-900 dark:text-white font-medium">{event.date}</div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Guest Count</label>
-                <div className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white font-medium">{event.guest_count}</div>
+                <div className="mt-1 text-sm text-gray-900 dark:text-white font-medium">{event.guest_count}</div>
               </div>
               <div className="col-span-2"></div>
 
@@ -380,7 +393,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
 
           {/* Staff Details */}
           <section>
-            <h4 className="text-md font-medium text-gray-900 dark:text-white dark:text-white mb-4">Staff Details</h4>
+            <h4 className="text-md font-medium text-gray-900 dark:text-white mb-4">Staff Details</h4>
             <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Driver A</label>
@@ -400,10 +413,10 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   ))}
                 </select>
               </div>
-              {[1, 2, 3, 4, 5, 6].map(num => (
+              {OPERATOR_NUMBERS.map(num => (
                 <div key={`op-${num}`}>
                   <label className="block text-sm font-medium text-gray-700">Operator {num}</label>
-                  <select {...register(`operator_${num}` as any)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm">
+                  <select {...register(`operator_${num}` as OperatorField)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm">
                     <option value="">Unassigned</option>
                     {staffList.map(s => (
                       <option key={s.id} value={s.user_id}>{s.first_name} {s.last_name}</option>
@@ -416,7 +429,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
 
           {/* Equipment */}
           <section>
-            <h4 className="text-md font-medium text-gray-900 dark:text-white dark:text-white mb-4">Equipment</h4>
+            <h4 className="text-md font-medium text-gray-900 dark:text-white mb-4">Equipment</h4>
             <div className="grid grid-cols-2 gap-y-4 gap-x-4 sm:grid-cols-3 lg:grid-cols-4">
               <div className="flex items-center">
                 <input
@@ -425,7 +438,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   {...register('cart_1')}
                   className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                 />
-                <label htmlFor="cart_1" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                <label htmlFor="cart_1" className="ml-2 block text-sm text-gray-900 dark:text-white">
                   Cart 1
                 </label>
               </div>
@@ -436,7 +449,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   {...register('cart_2')}
                   className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                 />
-                <label htmlFor="cart_2" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                <label htmlFor="cart_2" className="ml-2 block text-sm text-gray-900 dark:text-white">
                   Cart 2
                 </label>
               </div>
@@ -447,7 +460,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   {...register('booth_1')}
                   className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                 />
-                <label htmlFor="booth_1" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                <label htmlFor="booth_1" className="ml-2 block text-sm text-gray-900 dark:text-white">
                   Booth 1
                 </label>
               </div>
@@ -458,7 +471,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   {...register('booth_2')}
                   className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                 />
-                <label htmlFor="booth_2" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                <label htmlFor="booth_2" className="ml-2 block text-sm text-gray-900 dark:text-white">
                   Booth 2
                 </label>
               </div>
@@ -469,7 +482,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   {...register('freezer_1')}
                   className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                 />
-                <label htmlFor="freezer_1" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                <label htmlFor="freezer_1" className="ml-2 block text-sm text-gray-900 dark:text-white">
                   Freezer 1
                 </label>
               </div>
@@ -480,7 +493,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   {...register('freezer_2')}
                   className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                 />
-                <label htmlFor="freezer_2" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                <label htmlFor="freezer_2" className="ml-2 block text-sm text-gray-900 dark:text-white">
                   Freezer 2
                 </label>
               </div>
@@ -491,7 +504,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   {...register('rollz_1')}
                   className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                 />
-                <label htmlFor="rollz_1" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                <label htmlFor="rollz_1" className="ml-2 block text-sm text-gray-900 dark:text-white">
                   Rollz 1
                 </label>
               </div>
@@ -502,7 +515,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   {...register('pancake_1')}
                   className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                 />
-                <label htmlFor="pancake_1" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                <label htmlFor="pancake_1" className="ml-2 block text-sm text-gray-900 dark:text-white">
                   Pancake 1
                 </label>
               </div>
@@ -513,7 +526,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   {...register('pancake_2')}
                   className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                 />
-                <label htmlFor="pancake_2" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                <label htmlFor="pancake_2" className="ml-2 block text-sm text-gray-900 dark:text-white">
                   Pancake 2
                 </label>
               </div>
@@ -524,7 +537,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   {...register('waffle_1')}
                   className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                 />
-                <label htmlFor="waffle_1" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                <label htmlFor="waffle_1" className="ml-2 block text-sm text-gray-900 dark:text-white">
                   Waffle 1
                 </label>
               </div>
@@ -535,7 +548,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
                   {...register('waffle_2')}
                   className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                 />
-                <label htmlFor="waffle_2" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                <label htmlFor="waffle_2" className="ml-2 block text-sm text-gray-900 dark:text-white">
                   Waffle 2
                 </label>
               </div>
@@ -544,7 +557,7 @@ export default function RunSheetTab({ event, venue }: RunSheetTabProps) {
 
           {/* Additional Info */}
           <section>
-            <h4 className="text-md font-medium text-gray-900 dark:text-white dark:text-white mb-4">Additional Event Info - Issues - Problems</h4>
+            <h4 className="text-md font-medium text-gray-900 dark:text-white mb-4">Additional Event Info - Issues - Problems</h4>
             <div>
               <textarea
                 {...register('notes')}

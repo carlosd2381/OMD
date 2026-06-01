@@ -28,9 +28,10 @@ export default function UpdatePasswordPage() {
 
       toast.success('Password updated successfully');
       navigate('/');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating password:', error);
-      toast.error(error.message || 'Failed to update password');
+      const message = error instanceof Error ? error.message : 'Failed to update password';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -39,7 +40,7 @@ export default function UpdatePasswordPage() {
   return (
     <form className="space-y-6" onSubmit={handleUpdate}>
       <div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4">Set New Password</h3>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Set New Password</h3>
         <label htmlFor="password" className="block text-sm font-medium text-gray-700">
           New Password
         </label>

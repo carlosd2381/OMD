@@ -41,6 +41,25 @@ const mergeNotificationSettings = (incoming?: Record<string, Partial<Notificatio
   return base;
 };
 
+type SmtpConfig = {
+  host?: string;
+  port?: string;
+  username?: string;
+  password?: string;
+  secure?: boolean;
+};
+
+type SenderIdentityConfig = {
+  fromName?: string;
+  replyTo?: string;
+};
+
+type SmsConfig = {
+  accountSid?: string;
+  authToken?: string;
+  phoneNumber?: string;
+};
+
 export default function EmailMessagingSettings() {
   const [activeTab, setActiveTab] = useState('email');
   const [loading, setLoading] = useState(false);
@@ -84,10 +103,10 @@ export default function EmailMessagingSettings() {
       ]);
 
       if (emailData) {
-        const smtp = emailData.smtp_config as any || {};
-        const sender = emailData.sender_identity as any || {};
+        const smtp = (emailData.smtp_config as SmtpConfig | null) || {};
+        const sender = (emailData.sender_identity as SenderIdentityConfig | null) || {};
         const notifs = (emailData.notifications as Record<string, Partial<NotificationChannel>> | null) || null;
-        const sms = emailData.sms_config as any || {};
+        const sms = (emailData.sms_config as SmsConfig | null) || {};
 
         setSmtpSettings({
           host: smtp.host || '',
@@ -192,8 +211,8 @@ export default function EmailMessagingSettings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Email & Messaging</h2>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Configure how your system communicates with clients and staff.</p>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Email & Messaging</h2>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Configure how your system communicates with clients and staff.</p>
         </div>
         <button 
           onClick={handleSave}
@@ -206,7 +225,7 @@ export default function EmailMessagingSettings() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+      <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
           {tabs.map((tab) => (
             <button
@@ -215,12 +234,12 @@ export default function EmailMessagingSettings() {
               className={`${
                 activeTab === tab.id
                   ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
               } group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm`}
             >
               <tab.icon
                 className={`${
-                  activeTab === tab.id ? 'text-primary' : 'text-gray-400 group-hover:text-gray-500 dark:text-gray-400 dark:text-gray-400'
+                  activeTab === tab.id ? 'text-primary' : 'text-gray-400 group-hover:text-gray-500 dark:text-gray-400'
                 } -ml-0.5 mr-2 h-5 w-5`}
                 aria-hidden="true"
               />
@@ -231,18 +250,18 @@ export default function EmailMessagingSettings() {
       </div>
 
       {/* Content */}
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow rounded-lg p-6">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
         
         {/* Email Configuration Tab */}
         {activeTab === 'email' && (
           <div className="space-y-8">
             {/* SMTP Settings */}
             <div>
-              <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white dark:text-white flex items-center">
+              <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white flex items-center">
                 <Server className="h-5 w-5 mr-2 text-gray-400" />
                 SMTP Configuration
               </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Configure your outgoing email server settings.</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Configure your outgoing email server settings.</p>
               <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
                 <div className="sm:col-span-4">
                   <label className="block text-sm font-medium text-gray-700">SMTP Host</label>
@@ -289,7 +308,7 @@ export default function EmailMessagingSettings() {
                       onChange={(e) => setSmtpSettings({...smtpSettings, secure: e.target.checked})}
                       className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                     />
-                    <label htmlFor="secure-smtp" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+                    <label htmlFor="secure-smtp" className="ml-2 block text-sm text-gray-900 dark:text-white">
                       Use Secure Connection (SSL/TLS)
                     </label>
                   </div>
@@ -297,8 +316,8 @@ export default function EmailMessagingSettings() {
               </div>
             </div>
 
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-8">
-              <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white dark:text-white flex items-center">
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+              <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white flex items-center">
                 <User className="h-5 w-5 mr-2 text-gray-400" />
                 Sender Identity
               </h3>
@@ -324,9 +343,9 @@ export default function EmailMessagingSettings() {
               </div>
             </div>
 
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-8">
-              <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white dark:text-white">Global Email Signature</h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">This signature will be appended to all system emails.</p>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+              <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white">Global Email Signature</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">This signature will be appended to all system emails.</p>
               <div className="mt-4">
                 <textarea
                   rows={5}
@@ -334,7 +353,7 @@ export default function EmailMessagingSettings() {
                   onChange={(e) => setSignature(e.target.value)}
                   className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm font-mono"
                 />
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">HTML is supported.</p>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">HTML is supported.</p>
               </div>
             </div>
           </div>
@@ -343,11 +362,11 @@ export default function EmailMessagingSettings() {
         {/* Notifications Tab */}
         {activeTab === 'notifications' && (
           <div>
-            <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white dark:text-white">Notification Preferences</h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-6">Choose how you want to be notified for different events.</p>
+            <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white">Notification Preferences</h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 mb-6">Choose how you want to be notified for different events.</p>
             
             <div className="space-y-4">
-              <div className="grid grid-cols-5 gap-4 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 pb-2 font-medium text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+              <div className="grid grid-cols-5 gap-4 border-b border-gray-200 dark:border-gray-700 pb-2 font-medium text-sm text-gray-500 dark:text-gray-400">
                 <div className="col-span-1">Event Type</div>
                 <div className="text-center">Email</div>
                 <div className="text-center">In-App</div>
@@ -357,7 +376,7 @@ export default function EmailMessagingSettings() {
 
               {Object.entries(notifications).map(([key, prefs]) => (
                 <div key={key} className="grid grid-cols-5 gap-4 items-center py-2">
-                  <div className="col-span-1 text-sm font-medium text-gray-900 dark:text-white dark:text-white capitalize">
+                  <div className="col-span-1 text-sm font-medium text-gray-900 dark:text-white capitalize">
                     {key.replace(/([A-Z])/g, ' ').trim()}
                   </div>
                   {Object.entries(prefs).map(([channel, enabled]) => (
@@ -382,11 +401,11 @@ export default function EmailMessagingSettings() {
         {/* SMS Gateway Tab */}
         {activeTab === 'sms' && (
           <div>
-            <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white dark:text-white flex items-center">
+            <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white flex items-center">
               <Smartphone className="h-5 w-5 mr-2 text-gray-400" />
               Twilio Configuration
             </h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Connect your Twilio account to enable SMS features.</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Connect your Twilio account to enable SMS features.</p>
             
             <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
               <div className="sm:col-span-4">

@@ -5,7 +5,7 @@ export interface StaffPayRateRule {
   position_key: string;
   position_label: string;
   rate_type: StaffPayRateType;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
   notes?: string;
 }
 

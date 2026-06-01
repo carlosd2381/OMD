@@ -25,6 +25,21 @@ export const parseDateInput = (value: string): Date => {
   return new Date(value);
 };
 
+export const isPastDate = (value?: string | null): boolean => {
+  if (!value) return false;
+
+  const date = parseDateInput(value);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const normalizedDate = new Date(date);
+  normalizedDate.setHours(0, 0, 0, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return normalizedDate < today;
+};
+
 export const formatDocumentID = (
   prefix: 'QT' | 'INV' | 'CON' | 'QST',
   eventDate: string,

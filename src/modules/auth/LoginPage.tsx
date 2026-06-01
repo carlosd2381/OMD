@@ -23,9 +23,10 @@ export default function LoginPage() {
 
       toast.success('Welcome back!');
       navigate('/');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error logging in:', error);
-      toast.error(error.message || 'Failed to login');
+      const message = error instanceof Error ? error.message : 'Failed to login';
+      toast.error(message);
     } finally {
       setLoading(false);
     }

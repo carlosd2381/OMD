@@ -1,7 +1,11 @@
 import { supabase } from '../lib/supabase';
 import type { Conversation, ConversationMessage, ContactIdentity, MessageAttachment } from '../types/conversation';
 
-const db = supabase as any;
+type UntypedSupabaseClient = {
+  from: (table: string) => ReturnType<typeof supabase.from>;
+};
+
+const db = supabase as unknown as UntypedSupabaseClient;
 const LOAD_EMAIL_BODY_ENDPOINT = '/.netlify/functions/loadEmailBody';
 
 export interface ConversationParticipant {

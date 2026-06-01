@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Edit2, ChevronDown, ChevronRight, Circle, CheckCircle2, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { settingsService } from '../../services/settingsService';
+import { settingsService, type ExpenseCategory as DbExpenseCategory } from '../../services/settingsService';
 
 interface ChildCategory {
   id: string;
@@ -17,6 +17,11 @@ interface ParentCategory {
   isActive: boolean;
   children: ChildCategory[];
 }
+
+const parseChildren = (value: unknown): ChildCategory[] => {
+  if (!Array.isArray(value)) return [];
+  return value as ChildCategory[];
+};
 
 const INITIAL_DATA: ParentCategory[] = [
   {
@@ -132,23 +137,38 @@ export default function ExpenseCategorySettings() {
   const [modalName, setModalName] = useState('');
   const [modalColor, setModalColor] = useState('#000000');
 
-  useEffect(() => {
-    loadCategories();
+  const seedDefaults = useCallback(async () => {
+      try {
+          for (const cat of INITIAL_DATA) {
+              await settingsService.createExpenseCategory({
+                  name: cat.name,
+                  color: cat.color,
+                  is_active: cat.isActive,
+                  children: cat.children
+                } as Partial<DbExpenseCategory>);
+          }
+      } catch (error) {
+          console.error('Error seeding defaults:', error);
+      }
   }, []);
 
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     setLoading(true);
     try {
       const data = await settingsService.getExpenseCategories();
       if (data.length === 0) {
-          // Seed defaults if empty
-          // We'll just show them in UI for now, and let user save them individually? 
-          // Or better, just set them as state and let user interact.
-          // But if we want them to persist, we should probably create them.
-          // For now, let's just set them in state. If user edits, we might have issues with IDs.
-          // So let's create them in DB.
           await seedDefaults();
-          return; // seedDefaults calls loadCategories again
+          const seededData = await settingsService.getExpenseCategories();
+          const seededMapped: ParentCategory[] = seededData.map(item => ({
+            id: item.id,
+            name: item.name,
+            color: item.color || '#000000',
+            isActive: item.is_active !== false,
+            children: parseChildren((item as unknown as { children?: unknown }).children)
+          }));
+          setCategories(seededMapped);
+          setExpandedIds(new Set(seededMapped.map(c => c.id)));
+          return;
       }
 
       const mapped: ParentCategory[] = data.map(item => ({
@@ -156,7 +176,7 @@ export default function ExpenseCategorySettings() {
         name: item.name,
         color: item.color || '#000000',
         isActive: item.is_active !== false,
-        children: ((item as any).children as any[]) || []
+        children: parseChildren((item as unknown as { children?: unknown }).children)
       }));
       setCategories(mapped);
       setExpandedIds(new Set(mapped.map(c => c.id)));
@@ -166,23 +186,11 @@ export default function ExpenseCategorySettings() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [seedDefaults]);
 
-  const seedDefaults = async () => {
-      try {
-          for (const cat of INITIAL_DATA) {
-              await settingsService.createExpenseCategory({
-                  name: cat.name,
-                  color: cat.color,
-                  is_active: cat.isActive,
-                  children: cat.children
-              } as any);
-          }
-          await loadCategories();
-      } catch (error) {
-          console.error('Error seeding defaults:', error);
-      }
-  };
+  useEffect(() => {
+    void loadCategories();
+  }, [loadCategories]);
 
   const toggleExpand = (id: string) => {
     const newExpanded = new Set(expandedIds);
@@ -238,14 +246,14 @@ export default function ExpenseCategorySettings() {
                 color: modalColor,
                 is_active: true,
                 children: []
-            } as any);
+            } as Partial<DbExpenseCategory>);
             toast.success('Category added');
         } else if (editingChildId === 'PARENT_EDIT_MODE') {
             // Edit Parent
             await settingsService.updateExpenseCategory(editingParentId, {
                 name: modalName,
                 color: modalColor
-            } as any);
+            } as Partial<DbExpenseCategory>);
             toast.success('Category updated');
         } else if (editingChildId === null) {
             // Add New Child
@@ -259,7 +267,7 @@ export default function ExpenseCategorySettings() {
                 const updatedChildren = [...parent.children, newChild];
                 await settingsService.updateExpenseCategory(editingParentId, {
                     children: updatedChildren
-                } as any);
+                } as Partial<DbExpenseCategory>);
                 toast.success('Sub-category added');
             }
         } else {
@@ -273,7 +281,7 @@ export default function ExpenseCategorySettings() {
                 );
                 await settingsService.updateExpenseCategory(editingParentId, {
                     children: updatedChildren
-                } as any);
+                } as Partial<DbExpenseCategory>);
                 toast.success('Sub-category updated');
             }
         }
@@ -306,7 +314,7 @@ export default function ExpenseCategorySettings() {
         const updatedChildren = parent.children.map(child => 
             child.id === childId ? { ...child, isActive: !child.isActive } : child
         );
-        await settingsService.updateExpenseCategory(parentId, { children: updatedChildren } as any);
+        await settingsService.updateExpenseCategory(parentId, { children: updatedChildren } as Partial<DbExpenseCategory>);
         await loadCategories();
         toast.success('Sub-category status updated');
     } catch (error) {
@@ -323,11 +331,11 @@ export default function ExpenseCategorySettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Expense Categories</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Manage your chart of accounts for expense tracking.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Expense Categories</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Manage your chart of accounts for expense tracking.</p>
           </div>
         </div>
         <button
@@ -342,13 +350,13 @@ export default function ExpenseCategorySettings() {
       {loading && categories.length === 0 ? (
           <div className="text-center py-12">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-primary border-t-transparent"></div>
-              <p className="mt-2 text-gray-500 dark:text-gray-400 dark:text-gray-400">Loading categories...</p>
+              <p className="mt-2 text-gray-500 dark:text-gray-400">Loading categories...</p>
           </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
             <ul className="divide-y divide-gray-200">
             {categories.map((parent) => (
-                <li key={parent.id} className={`bg-white dark:bg-gray-800 dark:bg-gray-800 ${!parent.isActive ? 'opacity-60' : ''}`}>
+                <li key={parent.id} className={`bg-white dark:bg-gray-800 ${!parent.isActive ? 'opacity-60' : ''}`}>
                 <div className="px-4 py-4 sm:px-6">
                     <div className="flex items-center justify-between">
                     <div className="flex items-center flex-1 min-w-0">
@@ -367,7 +375,7 @@ export default function ExpenseCategorySettings() {
                         style={{ backgroundColor: parent.color }}
                         />
                         <div className="flex flex-col">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white dark:text-white truncate flex items-center">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate flex items-center">
                             {parent.name}
                             {!parent.isActive && (
                             <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
@@ -375,7 +383,7 @@ export default function ExpenseCategorySettings() {
                             </span>
                             )}
                         </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
                             {parent.children.length} sub-categories
                         </p>
                         </div>
@@ -443,9 +451,9 @@ export default function ExpenseCategorySettings() {
 
       {/* Edit/Add Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-gray-50 dark:bg-gray-700 dark:bg-gray-7000 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4">
+        <div className="fixed inset-0 bg-gray-50 dark:bg-gray-7000 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
               {editingParentId === null ? 'Add Category' : 
                editingChildId === 'PARENT_EDIT_MODE' ? 'Edit Category' :
                editingChildId === null ? 'Add Sub-category' : 'Edit Sub-category'}
@@ -487,7 +495,7 @@ export default function ExpenseCategorySettings() {
             <div className="mt-6 flex justify-end space-x-3">
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700"
               >
                 Cancel
               </button>

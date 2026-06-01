@@ -108,7 +108,7 @@ export default function TaskModal({ isOpen, onClose, onSave, task }: TaskModalPr
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-gray-50 dark:bg-gray-700 dark:bg-gray-7000 bg-opacity-75 transition-opacity" />
+          <div className="fixed inset-0 bg-gray-50 dark:bg-gray-7000 bg-opacity-75 transition-opacity" />
         </Transition.Child>
 
         <div className="fixed inset-0 z-10 overflow-y-auto">
@@ -122,11 +122,11 @@ export default function TaskModal({ isOpen, onClose, onSave, task }: TaskModalPr
               leaveFrom="opacity-100 translate-y-0 sm:scale-100"
               leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
             >
-              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 dark:bg-gray-800 px-4 pt-5 pb-4 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 px-4 pt-5 pb-4 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
                 <div className="absolute top-0 right-0 hidden pt-4 pr-4 sm:block">
                   <button
                     type="button"
-                    className="rounded-md bg-white dark:bg-gray-800 dark:bg-gray-800 text-gray-400 hover:text-gray-500 dark:text-gray-400 dark:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    className="rounded-md bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-500 dark:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
                     onClick={onClose}
                   >
                     <span className="sr-only">Close</span>
@@ -136,7 +136,7 @@ export default function TaskModal({ isOpen, onClose, onSave, task }: TaskModalPr
                 
                 <div className="sm:flex sm:items-start">
                   <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                    <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900 dark:text-white dark:text-white">
+                    <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-gray-900 dark:text-white">
                       {task ? 'Edit Task' : 'New Task'}
                     </Dialog.Title>
                     <div className="mt-2">
@@ -209,7 +209,7 @@ export default function TaskModal({ isOpen, onClose, onSave, task }: TaskModalPr
                           </select>
                         </div>
 
-                        <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                        <div className="mt-5 sm:mt-4 sm:flex-row-reverse">
                           <button
                             type="submit"
                             disabled={loading}
@@ -219,7 +219,7 @@ export default function TaskModal({ isOpen, onClose, onSave, task }: TaskModalPr
                           </button>
                           <button
                             type="button"
-                            className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white dark:bg-gray-800 dark:bg-gray-800 px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm"
+                            className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white dark:bg-gray-800 px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm"
                             onClick={onClose}
                           >
                             Cancel

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -38,16 +38,14 @@ export default function ClientForm() {
     resolver: zodResolver(clientSchema),
   });
 
-  useEffect(() => {
-    if (isEditMode) {
-      loadClient();
+  const loadClient = useCallback(async () => {
+    if (!id) {
+      return;
     }
-  }, [id]);
 
-  const loadClient = async () => {
     try {
       setLoading(true);
-      const client = await clientService.getClient(id!);
+      const client = await clientService.getClient(id);
       if (client) {
         reset(client);
       } else {
@@ -59,7 +57,13 @@ export default function ClientForm() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, navigate, reset]);
+
+  useEffect(() => {
+    if (isEditMode) {
+      loadClient();
+    }
+  }, [isEditMode, loadClient]);
 
   const onSubmit = async (data: ClientFormData) => {
     try {
@@ -90,14 +94,14 @@ export default function ClientForm() {
           onClick={() => navigate('/clients')}
           className="p-2 rounded-full hover:bg-gray-100"
         >
-          <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+          <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
         </button>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           {isEditMode ? 'Edit Client' : 'New Client'}
         </h1>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow px-4 py-5 sm:rounded-lg sm:p-6">
+      <div className="bg-white dark:bg-gray-800 shadow px-4 py-5 sm:rounded-lg sm:p-6">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
             <div className="sm:col-span-3">
@@ -362,7 +366,7 @@ export default function ClientForm() {
             <button
               type="button"
               onClick={() => navigate('/clients')}
-              className="bg-white dark:bg-gray-800 dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+              className="bg-white dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
             >
               Cancel
             </button>

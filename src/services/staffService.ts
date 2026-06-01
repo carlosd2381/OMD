@@ -1,6 +1,57 @@
 import { supabase } from '../lib/supabase';
 import type { StaffProfile, EventStaffAssignment } from '../types/staff';
 
+type StaffProfileRow = Partial<Omit<StaffProfile, 'id' | 'email' | 'created_at' | 'updated_at'>> & {
+  user_id?: string;
+};
+
+type RawAssignmentRow = {
+  id: string;
+  event_id: string;
+  staff_id: string;
+  role: string;
+  status: EventStaffAssignment['status'];
+  pay_type: EventStaffAssignment['pay_type'];
+  is_paid: boolean;
+  pay_rate?: number | null;
+  total_pay?: number | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  hours_worked?: number | null;
+  pay_rate_id?: string | null;
+  compensation_config?: EventStaffAssignment['compensation_config'];
+  paid_at?: string | null;
+  payment_reference?: string | null;
+  payment_method?: string | null;
+  from_account?: string | null;
+  to_account?: string | null;
+  event?: EventStaffAssignment['event'];
+  events?: EventStaffAssignment['event'];
+};
+
+const normalizeAssignmentRow = (row: RawAssignmentRow): EventStaffAssignment => ({
+  id: row.id,
+  event_id: row.event_id,
+  staff_id: row.staff_id,
+  role: row.role,
+  status: row.status,
+  start_time: row.start_time || undefined,
+  end_time: row.end_time || undefined,
+  hours_worked: row.hours_worked ?? undefined,
+  pay_rate: row.pay_rate ?? undefined,
+  pay_type: row.pay_type,
+  total_pay: row.total_pay ?? undefined,
+  pay_rate_id: row.pay_rate_id ?? undefined,
+  compensation_config: row.compensation_config,
+  is_paid: row.is_paid,
+  paid_at: row.paid_at || undefined,
+  payment_reference: row.payment_reference || undefined,
+  payment_method: row.payment_method || undefined,
+  from_account: row.from_account || undefined,
+  to_account: row.to_account || undefined,
+  event: row.event || row.events || undefined,
+});
+
 export const staffService = {
   // --- Staff Profiles ---
 
@@ -25,7 +76,7 @@ export const staffService = {
 
     // Merge data
     return users.map(user => {
-      const profile: any = profiles?.find((p: any) => p.user_id === user.id) || {};
+      const profile = (profiles?.find((p) => p.user_id === user.id) || {}) as StaffProfileRow;
       return {
         id: user.id, // Using user_id as the main ID for simplicity
         user_id: user.id,
@@ -87,7 +138,7 @@ export const staffService = {
       .single();
 
     // Handle missing profile table or record gracefully
-    const p: any = profile || {};
+    const p = (profile || {}) as StaffProfileRow;
 
     return {
       id: user.id,
@@ -151,24 +202,7 @@ export const staffService = {
 
     if (error && error.code !== '42P01') throw error;
 
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      event_id: row.event_id,
-      staff_id: row.staff_id,
-      role: row.role,
-      status: row.status,
-      start_time: row.start_time,
-      end_time: row.end_time,
-      hours_worked: row.hours_worked,
-      pay_rate: row.pay_rate,
-      pay_type: row.pay_type,
-      total_pay: row.total_pay,
-      pay_rate_id: row.pay_rate_id,
-      compensation_config: row.compensation_config,
-      is_paid: row.is_paid,
-      paid_at: row.paid_at,
-      staff: undefined as any
-    }));
+    return (data || []).map((row) => normalizeAssignmentRow(row as unknown as RawAssignmentRow));
   },
 
   /**
@@ -300,10 +334,12 @@ export const staffService = {
 
     if (error && error.code !== '42P01') throw error;
 
-    return (data || []).map((row: any) => ({
-      ...row,
-      event: row.events
-    }));
+    return (data || []).map((row) =>
+      normalizeAssignmentRow({
+        ...(row as unknown as RawAssignmentRow),
+        event: (row as unknown as RawAssignmentRow).events,
+      })
+    );
   },
 
   async assignStaffToEvent(assignment: Partial<EventStaffAssignment>): Promise<void> {
@@ -333,11 +369,13 @@ export const staffService = {
   async updateAssignment(id: string, updates: Partial<EventStaffAssignment>): Promise<void> {
     console.debug('[staffService] updateAssignment', { id, updates });
     // Filter out fields that are not in the database table or have wrong types
-    const { event, staff, ...dbUpdates } = updates;
+    const dbUpdates = { ...updates } as Partial<EventStaffAssignment> & Record<string, unknown>;
+    delete dbUpdates.event;
+    delete dbUpdates.staff;
     
     const { error } = await supabase
       .from('event_staff_assignments')
-      .update(dbUpdates as any) // Cast to any to avoid strict type checking on status enum mismatch if any
+      .update(dbUpdates)
       .eq('id', id);
 
     if (error) {
@@ -377,10 +415,11 @@ export const staffService = {
 
     if (error && error.code !== '42P01') throw error;
 
-    return (data || []).map((row: any) => ({
-      ...row,
-      event: row.events,
-      // Caller can match staff_id to their staff list for names
-    }));
+    return (data || []).map((row) =>
+      normalizeAssignmentRow({
+        ...(row as unknown as RawAssignmentRow),
+        event: (row as unknown as RawAssignmentRow).events,
+      })
+    );
   }
 };

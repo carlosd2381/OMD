@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -32,9 +32,34 @@ export default function CompanySettings() {
     resolver: zodResolver(companySchema),
   });
 
+  const loadSettings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const settings = await settingsService.getBrandingSettings();
+      if (settings) {
+        reset({
+          company_name: settings.company_name,
+          address: settings.address || '',
+          email: settings.email || '',
+          website: settings.website || '',
+          phone: settings.phone || '',
+          instagram: settings.instagram || '',
+          facebook: settings.facebook || '',
+          tiktok: settings.tiktok || '',
+          latitude: settings.latitude || undefined,
+          longitude: settings.longitude || undefined,
+        });
+      }
+    } catch (error) {
+      toast.error('Failed to load company settings');
+    } finally {
+      setLoading(false);
+    }
+  }, [reset]);
+
   useEffect(() => {
     loadSettings();
-  }, []);
+  }, [loadSettings]);
 
   useEffect(() => {
     const initMaps = async () => {
@@ -70,31 +95,6 @@ export default function CompanySettings() {
     initMaps();
   }, [setValue]);
 
-  const loadSettings = async () => {
-    try {
-      setLoading(true);
-      const settings = await settingsService.getBrandingSettings();
-      if (settings) {
-        reset({
-          company_name: settings.company_name,
-          address: settings.address || '',
-          email: settings.email || '',
-          website: settings.website || '',
-          phone: settings.phone || '',
-          instagram: settings.instagram || '',
-          facebook: settings.facebook || '',
-          tiktok: settings.tiktok || '',
-          latitude: settings.latitude || undefined,
-          longitude: settings.longitude || undefined,
-        });
-      }
-    } catch (error) {
-      toast.error('Failed to load company settings');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const onSubmit = async (data: CompanyFormData) => {
     try {
       setLoading(true);
@@ -115,9 +115,9 @@ export default function CompanySettings() {
             onClick={() => navigate('/settings')}
             className="p-2 rounded-full hover:bg-gray-100"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Company Details</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Company Details</h1>
         </div>
         <button
           onClick={handleSubmit(onSubmit)}
@@ -129,13 +129,13 @@ export default function CompanySettings() {
         </button>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow px-4 py-5 sm:rounded-lg sm:p-6">
+      <div className="bg-white dark:bg-gray-800 shadow px-4 py-5 sm:rounded-lg sm:p-6">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
             
             <div className="sm:col-span-6">
-              <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white dark:text-white">General Information</h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+              <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white">General Information</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 This information will be used throughout the app and on documents.
               </p>
             </div>
@@ -215,7 +215,7 @@ export default function CompanySettings() {
                   step="any"
                   id="latitude"
                   {...register('latitude', { valueAsNumber: true })}
-                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md bg-gray-50 dark:bg-gray-700"
                   readOnly
                 />
               </div>
@@ -231,15 +231,15 @@ export default function CompanySettings() {
                   step="any"
                   id="longitude"
                   {...register('longitude', { valueAsNumber: true })}
-                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                  className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-md bg-gray-50 dark:bg-gray-700"
                   readOnly
                 />
               </div>
             </div>
 
-            <div className="sm:col-span-6 border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-6 mt-6">
-              <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white dark:text-white">Online Presence</h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+            <div className="sm:col-span-6 border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+              <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white">Online Presence</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 Website and social media links.
               </p>
             </div>

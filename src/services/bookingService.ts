@@ -6,6 +6,7 @@ import { clientService } from './clientService';
 import { venueService } from './venueService';
 import { tokenService } from './tokenService';
 import { invoiceService } from './invoiceService';
+import { activityLogService } from './activityLogService';
 import type { Quote } from '../types/quote';
 
 export const bookingService = {
@@ -40,8 +41,85 @@ export const bookingService = {
       console.error('Error generating booking documents:', error);
       throw error;
     }
+  },
+
+  regenerateBookingDocumentsForQuoteRevision: async (originalQuoteId: string, revisedQuote: Quote) => {
+    try {
+      const { paidTotal } = await prepareLegacyInvoicesForRevision(originalQuoteId);
+
+      await bookingService.generateBookingDocuments(revisedQuote, false);
+
+      if (paidTotal > 0) {
+        await createCreditInvoiceForRevision(originalQuoteId, revisedQuote, paidTotal);
+      }
+
+      await activityLogService.logActivity({
+        entity_id: revisedQuote.client_id,
+        entity_type: 'client',
+        action: 'Booking Documents Regenerated',
+        details: `Regenerated contract/invoices for revised quote ${revisedQuote.id} from quote ${originalQuoteId}`,
+      });
+
+      return { success: true, paidCreditApplied: paidTotal };
+    } catch (error) {
+      console.error('Error regenerating booking documents for quote revision:', error);
+      throw error;
+    }
   }
 };
+
+async function prepareLegacyInvoicesForRevision(originalQuoteId: string): Promise<{ paidTotal: number }> {
+  const { data: legacyInvoices, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('quote_id', originalQuoteId);
+
+  if (error) throw error;
+
+  const invoices = legacyInvoices || [];
+  if (invoices.length === 0) {
+    return { paidTotal: 0 };
+  }
+
+  const paidInvoices = invoices.filter((invoice) => invoice.status === 'paid');
+  const unpaidInvoices = invoices.filter((invoice) => invoice.status !== 'paid' && invoice.status !== 'cancelled');
+
+  const paidTotal = paidInvoices.reduce((sum, invoice) => sum + Number(invoice.total_amount || 0), 0);
+
+  if (unpaidInvoices.length > 0) {
+    const unpaidIds = unpaidInvoices.map((invoice) => invoice.id);
+    const { error: cancelError } = await supabase
+      .from('invoices')
+      .update({ status: 'cancelled' })
+      .in('id', unpaidIds);
+
+    if (cancelError) throw cancelError;
+  }
+
+  return { paidTotal };
+}
+
+async function createCreditInvoiceForRevision(originalQuoteId: string, revisedQuote: Quote, paidTotal: number) {
+  const today = new Date().toISOString().split('T')[0];
+
+  const { error } = await supabase.from('invoices').insert({
+    client_id: revisedQuote.client_id,
+    event_id: revisedQuote.event_id,
+    quote_id: revisedQuote.id,
+    invoice_number: `${revisedQuote.id.slice(0, 4)}-CR`,
+    items: [{
+      id: crypto.randomUUID(),
+      description: `Credit from payments received on quote ${originalQuoteId}`,
+      amount: -Math.abs(paidTotal),
+    }],
+    total_amount: -Math.abs(paidTotal),
+    status: 'paid',
+    due_date: today,
+    type: 'change_order',
+  });
+
+  if (error) throw error;
+}
 
 async function generateInvoices(quote: Quote, forceRegenerate: boolean) {
   // Check existing

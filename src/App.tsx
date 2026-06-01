@@ -16,6 +16,7 @@ const Dashboard = lazy(() => import('./modules/dashboard/Dashboard'));
 const Calendar = lazy(() => import('./modules/calendar/Calendar'));
 const TaskList = lazy(() => import('./modules/tasks/TaskList'));
 const MessagesPage = lazy(() => import('./modules/messages/MessagesPage'));
+const NotificationsPage = lazy(() => import('./modules/notifications/NotificationsPage'));
 
 const ClientPortal = lazy(() => import('./modules/portal/ClientPortal'));
 const PublicContactForm = lazy(() => import('./modules/leads/PublicContactForm'));
@@ -48,6 +49,7 @@ const InvoiceViewer = lazy(() => import('./modules/invoices/InvoiceViewer'));
 const QuestionnaireViewer = lazy(() => import('./modules/questionnaires/QuestionnaireViewer'));
 
 const ProductList = lazy(() => import('./modules/products/ProductList'));
+const FinancialsDashboard = lazy(() => import('./modules/financials/FinancialsDashboard'));
 
 const StaffList = lazy(() => import('./modules/staff/StaffList'));
 const StaffProfileDetails = lazy(() => import('./modules/staff/StaffProfileDetails'));
@@ -99,6 +101,7 @@ function App() {
           }>
             <Route index element={<Dashboard />} />
             <Route path="messages" element={<MessagesPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
           <Route path="staff">
             <Route index element={<StaffList />} />
             <Route path=":id" element={<StaffProfileDetails />} />
@@ -149,6 +152,7 @@ function App() {
           <Route path="invoices/:id" element={<InvoiceViewer />} />
           <Route path="questionnaires/:id" element={<QuestionnaireViewer />} />
           <Route path="products" element={<ProductList />} />
+          <Route path="financials" element={<FinancialsDashboard />} />
           <Route path="settings">
             <Route index element={<SettingsPage />} />
             <Route path="company" element={<CompanySettings />} />

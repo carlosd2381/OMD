@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Truck, Save, Settings, Calculator } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -41,30 +41,33 @@ export default function DeliverySettings() {
     }
   });
 
+  const loadSettings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const settings = await settingsService.getDeliverySettings();
+      if (!settings) return;
+      reset({
+        hq_address: settings.hq_address || '',
+        fuel_consumption: settings.fuel_consumption || 0,
+        fuel_price: settings.fuel_price || 0,
+        cost_per_km: settings.cost_per_km || 0,
+        setup_time: settings.setup_time || 0,
+        buffer_time: settings.buffer_time || 0,
+        base_fee: settings.base_fee || 0,
+        free_radius_km: settings.free_radius_km || 0,
+        min_fee: settings.min_fee || 0,
+      });
+    } catch (error) {
+      toast.error('Failed to load delivery settings');
+    } finally {
+      setLoading(false);
+    }
+  }, [reset]);
+
   useEffect(() => {
     loadSettings();
-  }, []);
+  }, [loadSettings]);
 
-  const loadSettings = async () => {
-    try {
-      const data = await settingsService.getDeliverySettings();
-      if (data) {
-        reset({
-          hq_address: data.hq_address || '',
-          fuel_consumption: data.fuel_consumption || 0,
-          fuel_price: data.fuel_price || 0,
-          cost_per_km: data.cost_per_km || 0,
-          setup_time: data.setup_time || 0,
-          buffer_time: data.buffer_time || 0,
-          base_fee: data.base_fee || 0,
-          free_radius_km: data.free_radius_km || 0,
-          min_fee: data.min_fee || 0,
-        });
-      }
-    } catch (error) {
-      console.error('Error loading delivery settings:', error);
-    }
-  };
 
   const onSubmit = async (data: DeliveryFormData) => {
     try {
@@ -91,7 +94,7 @@ export default function DeliverySettings() {
       <div className="mb-8">
         <button
           onClick={() => navigate('/settings')}
-          className="flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 mb-4"
+          className="flex items-center text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Settings
@@ -101,17 +104,17 @@ export default function DeliverySettings() {
             <Truck className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Travel Calculation</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Automatic calculation of distance, time, and travel costs from your HQ</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Travel Calculation</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Automatic calculation of distance, time, and travel costs from your HQ</p>
           </div>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700">
           <div className="flex items-center">
             <Truck className="h-5 w-5 text-blue-600 mr-2" />
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Travel Calculator</h2>
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white">Travel Calculator</h2>
           </div>
           <div className="flex items-center space-x-4">
             <Settings className="h-5 w-5 text-gray-400" />
@@ -127,7 +130,7 @@ export default function DeliverySettings() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
           <div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4">Travel Settings</h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Travel Settings</h3>
             <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label htmlFor="hq_address" className="block text-sm font-medium text-gray-700">
@@ -231,7 +234,7 @@ export default function DeliverySettings() {
             </div>
           </div>
 
-          <div className="flex justify-end pt-6 border-t border-gray-200 dark:border-gray-700 dark:border-gray-700">
+          <div className="flex justify-end pt-6 border-t border-gray-200 dark:border-gray-700">
             <button
               type="submit"
               disabled={loading}

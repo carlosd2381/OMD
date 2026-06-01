@@ -1,0 +1,2 @@
+first_name,last_name,email,phone,company_name,address,city,state,zip_code,country,role,relationship,type,lead_source,instagram,facebook,job_title,phone_office,notes,portal_access
+Jane,Doe,jane.doe@example.com,+52 998 123 4567,Acme Weddings,"77400 Cancun, Q.R.",Cancun,Quintana Roo,77400,Mexico,Bride,,Direct,Instagram,@janedoe,janedoe.profile,,,"Imported from legacy CRM export",false

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { settingsService, type BrandingSettings } from '../services/settingsService';
 
 interface BrandingContextType {
@@ -13,6 +13,7 @@ const BrandingContext = createContext<BrandingContextType>({
   refreshSettings: async () => {},
 });
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useBranding = () => useContext(BrandingContext);
 
 export function BrandingProvider({ children }: { children: React.ReactNode }) {
@@ -23,30 +24,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
   });
   const [loading, setLoading] = useState(true);
 
-  // Apply settings immediately if we have them from localStorage
-  useEffect(() => {
-    if (settings) {
-      applyBranding(settings);
-    }
-  }, []); // Run once on mount to apply cached settings
-
-  const loadSettings = async () => {
-    try {
-      const data = await settingsService.getBrandingSettings();
-      setSettings(data);
-      // Cache the new settings
-      if (data) {
-        localStorage.setItem('branding_settings', JSON.stringify(data));
-      }
-      applyBranding(data);
-    } catch (error) {
-      console.error('Failed to load branding settings:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const applyBranding = (settings: BrandingSettings | null) => {
+  const applyBranding = useCallback((settings: BrandingSettings | null) => {
     const root = window.document.documentElement;
 
     if (!settings) {
@@ -82,12 +60,35 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     if (settings.company_name) {
       document.title = settings.company_name;
     }
-  };
+  }, []);
+
+  const loadSettings = useCallback(async () => {
+    try {
+      const data = await settingsService.getBrandingSettings();
+      setSettings(data);
+      if (data) {
+        localStorage.setItem('branding_settings', JSON.stringify(data));
+      }
+      applyBranding(data);
+    } catch (error) {
+      console.error('Failed to load branding settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [applyBranding]);
+
+  // Apply cached/current settings whenever they change.
+  useEffect(() => {
+    if (settings) {
+      applyBranding(settings);
+    }
+  }, [settings, applyBranding]);
 
   useEffect(() => {
-    loadSettings();
+    void loadSettings();
+  }, [loadSettings]);
 
-    // Listen for system theme changes if mode is system
+  useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => {
       if (settings?.theme_mode === 'system') {
@@ -96,7 +97,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     };
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [settings?.theme_mode]);
+  }, [settings, applyBranding]);
 
   return (
     <BrandingContext.Provider value={{ settings, loading, refreshSettings: loadSettings }}>

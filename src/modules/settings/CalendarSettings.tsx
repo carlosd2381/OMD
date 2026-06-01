@@ -4,6 +4,27 @@ import { ArrowLeft, Calendar as CalendarIcon, Clock, Globe, Link as LinkIcon, Co
 import toast from 'react-hot-toast';
 import { settingsService } from '../../services/settingsService';
 
+type CalendarConfig = {
+  defaultView?: string;
+  workingHours?: {
+    start: string;
+    end: string;
+    days: string[];
+  };
+  eventColors?: {
+    wedding: string;
+    corporate: string;
+    social: string;
+    meeting: string;
+    other: string;
+  };
+  integrations?: {
+    google: boolean;
+    outlook: boolean;
+    apple: boolean;
+  };
+};
+
 export default function CalendarSettings() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -40,7 +61,7 @@ export default function CalendarSettings() {
       const data = await settingsService.getCalendarSettings();
       if (data) {
         // Parse working_hours JSON to extract everything
-        const config = data.working_hours as any || {};
+        const config = (data.working_hours as CalendarConfig | null) || {};
         setSettings({
           timezone: data.timezone,
           weekStart: data.week_start_day,
@@ -109,11 +130,11 @@ export default function CalendarSettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Calendar Settings</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Manage timezones, event colors, and integrations.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Calendar Settings</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Manage timezones, event colors, and integrations.</p>
           </div>
         </div>
         <button
@@ -131,8 +152,8 @@ export default function CalendarSettings() {
         <div className="space-y-6">
           
           {/* General Preferences */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+          <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
               <Globe className="h-5 w-5 mr-2 text-gray-400" />
               General Preferences
             </h3>
@@ -150,7 +171,7 @@ export default function CalendarSettings() {
                   <option value="America/Los_Angeles">Los Angeles (PST)</option>
                   <option value="UTC">UTC</option>
                 </select>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">All events will be displayed in this timezone.</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">All events will be displayed in this timezone.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -182,8 +203,8 @@ export default function CalendarSettings() {
           </div>
 
           {/* Working Hours */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+          <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
               <Clock className="h-5 w-5 mr-2 text-gray-400" />
               Working Hours
             </h3>
@@ -232,7 +253,7 @@ export default function CalendarSettings() {
                       className={`px-3 py-1 rounded-full text-xs font-medium uppercase transition-colors ${
                         settings.workingHours.days.includes(day)
                           ? 'bg-pink-100 text-pink-800 border border-pink-200'
-                          : 'bg-gray-100 text-gray-500 dark:text-gray-400 dark:text-gray-400 border border-gray-200 dark:border-gray-700 dark:border-gray-700 hover:bg-gray-200'
+                          : 'bg-gray-100 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-200'
                       }`}
                     >
                       {day}
@@ -249,8 +270,8 @@ export default function CalendarSettings() {
         <div className="space-y-6">
 
           {/* Event Colors */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+          <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
               <div className="h-5 w-5 mr-2 rounded-full bg-linear-to-br from-primary to-purple-500 opacity-50" />
               Event Type Colors
             </h3>
@@ -284,8 +305,8 @@ export default function CalendarSettings() {
           </div>
 
           {/* Integrations */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+          <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
               <CalendarIcon className="h-5 w-5 mr-2 text-gray-400" />
               Sync & Integrations
             </h3>
@@ -298,7 +319,7 @@ export default function CalendarSettings() {
                 <div key={integration.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
                   <div className="flex items-center">
                     <img src={integration.icon} alt="" className="h-5 w-5 mr-3 opacity-70" />
-                    <span className="text-sm font-medium text-gray-900 dark:text-white dark:text-white">{integration.label}</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">{integration.label}</span>
                   </div>
                   <button
                     onClick={() => toggleIntegration(integration.id as keyof typeof settings.integrations)}
@@ -307,7 +328,7 @@ export default function CalendarSettings() {
                     }`}
                   >
                     <span
-                      className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white dark:bg-gray-800 dark:bg-gray-800 shadow transform ring-0 transition ease-in-out duration-200 ${
+                      className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white dark:bg-gray-800 shadow transform ring-0 transition ease-in-out duration-200 ${
                         settings.integrations[integration.id as keyof typeof settings.integrations] ? 'translate-x-5' : 'translate-x-0'
                       }`}
                     />
@@ -318,12 +339,12 @@ export default function CalendarSettings() {
           </div>
 
           {/* Subscription Link */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+          <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
               <LinkIcon className="h-5 w-5 mr-2 text-gray-400" />
               Staff Subscription Feed
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
               Share this link with staff members to let them subscribe to the event calendar on their mobile devices.
             </p>
             <div className="flex rounded-md shadow-sm">
@@ -332,12 +353,12 @@ export default function CalendarSettings() {
                   type="text"
                   readOnly
                   value="https://app.omd.com/calendar/feed.ics"
-                  className="focus:ring-primary focus:border-primary block w-full rounded-none rounded-l-md sm:text-sm border-gray-300 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 text-gray-500 dark:text-gray-400 dark:text-gray-400"
+                  className="focus:ring-primary focus:border-primary block w-full rounded-none rounded-l-md sm:text-sm border-gray-300 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
                 />
               </div>
               <button
                 onClick={handleCopyLink}
-                className="-ml-px relative inline-flex items-center space-x-2 px-4 py-2 border border-gray-300 text-sm font-medium rounded-r-md text-gray-700 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                className="-ml-px relative inline-flex items-center space-x-2 px-4 py-2 border border-gray-300 text-sm font-medium rounded-r-md text-gray-700 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
               >
                 <Copy className="h-4 w-4 text-gray-400" />
                 <span>Copy</span>

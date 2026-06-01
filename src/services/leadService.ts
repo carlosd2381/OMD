@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { Lead, CreateLeadDTO, UpdateLeadDTO } from '../types/lead';
+import { activityLogService } from './activityLogService';
 
 export const leadService = {
   async getLeads(): Promise<Lead[]> {
@@ -49,6 +50,13 @@ export const leadService = {
       .single();
 
     if (error) throw error;
+
+    await activityLogService.logActivity({
+      entity_id: data.id,
+      entity_type: 'lead',
+      action: 'New Lead',
+      details: `Lead created: ${data.first_name || ''} ${data.last_name || ''}`.trim(),
+    });
 
     return mapToLead(data);
   },

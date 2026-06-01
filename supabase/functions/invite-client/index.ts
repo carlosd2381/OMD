@@ -19,7 +19,7 @@ serve(async (req) => {
   }
 
   try {
-    const { clientId } = await req.json();
+    const { clientId, includeRecoveryLink, redirectTo } = await req.json();
     if (!clientId) {
       console.error('invite-client: missing clientId');
       return new Response(JSON.stringify({ error: 'clientId is required' }), {
@@ -103,6 +103,28 @@ serve(async (req) => {
       });
     }
 
+    let recoveryLink: string | null = null;
+    if (includeRecoveryLink) {
+      const { data: recoveryData, error: recoveryError } = await admin.auth.admin.generateLink({
+        type: 'recovery',
+        email: client.email,
+        options: redirectTo ? { redirectTo } : undefined,
+      });
+
+      if (recoveryError) {
+        console.error('invite-client: generateLink(recovery) failed', recoveryError.message);
+      } else {
+        const recoveryRecord = recoveryData as unknown as {
+          properties?: { action_link?: string | null };
+          action_link?: string | null;
+        };
+        recoveryLink =
+          recoveryRecord?.properties?.action_link ||
+          recoveryRecord?.action_link ||
+          null;
+      }
+    }
+
     if (client.auth_user_id !== authUserId || !client.portal_access) {
       const { error: updateError } = await admin
         .from('clients')
@@ -118,7 +140,7 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, auth_user_id: authUserId }), {
+    return new Response(JSON.stringify({ ok: true, auth_user_id: authUserId, recovery_link: recoveryLink }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Globe, Mail, Phone, Briefcase, MessageSquare, Layout, Calendar, MapPin, Users, Cake, Plus, Eye, Trash2, X, Check, Upload, Download, FileText, Image as ImageIcon } from 'lucide-react';
-import { formatCurrency, formatPhoneNumber } from '../../utils/formatters';
+import { formatCurrency, formatPhoneNumber, isPastDate } from '../../utils/formatters';
 import { buildDocSequenceMap, buildEventSequenceMap, buildEventsMap, resolveDocumentId } from '../../utils/documentSequences';
+import { buildQuotePathFromLegacyInvoice } from '../../utils/quoteNavigation';
 import { clientService } from '../../services/clientService';
 import { eventService } from '../../services/eventService';
 import { plannerService } from '../../services/plannerService';
@@ -11,6 +12,7 @@ import { quoteService } from '../../services/quoteService';
 import { questionnaireService } from '../../services/questionnaireService';
 import { contractService } from '../../services/contractService';
 import { invoiceService } from '../../services/invoiceService';
+import { activityLogService, type DocumentNotificationStatus } from '../../services/activityLogService';
 import { taskService } from '../../services/taskService';
 import { fileService } from '../../services/fileService';
 import { userService } from '../../services/userService';
@@ -26,6 +28,7 @@ import type { Task, TaskTemplate } from '../../types/task';
 import type { ClientFile } from '../../types/clientFile';
 import type { User } from '../../services/userService';
 import NotesTab from '../../components/NotesTab';
+import { NotificationStatus } from '../../components/NotificationStatus';
 import PortalAdminTab from './PortalAdminTab';
 import toast from 'react-hot-toast';
 import { currencyService } from '../../services/currencyService';
@@ -62,17 +65,121 @@ export default function ClientDetails() {
   const [questionnaireDocSequences, setQuestionnaireDocSequences] = useState<Record<string, number>>({});
   const [contractDocSequences, setContractDocSequences] = useState<Record<string, number>>({});
   const [invoiceDocSequences, setInvoiceDocSequences] = useState<Record<string, number>>({});
+  const [quoteNotificationStatuses, setQuoteNotificationStatuses] = useState<Record<string, DocumentNotificationStatus | null>>({});
+  const [contractNotificationStatuses, setContractNotificationStatuses] = useState<Record<string, DocumentNotificationStatus | null>>({});
+  const [invoiceNotificationStatuses, setInvoiceNotificationStatuses] = useState<Record<string, DocumentNotificationStatus | null>>({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskAssignee, setNewTaskAssignee] = useState('');
   const [isAddingTask, setIsAddingTask] = useState(false);
+  const [showLegacyInvoices, setShowLegacyInvoices] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('omd:admin:showLegacyInvoices');
+      if (stored === 'true') setShowLegacyInvoices(true);
+    } catch {
+      // Ignore storage read issues
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('omd:admin:showLegacyInvoices', showLegacyInvoices ? 'true' : 'false');
+    } catch {
+      // Ignore storage write issues
+    }
+  }, [showLegacyInvoices]);
   
   // File Upload State
   const [isUploading, setIsUploading] = useState(false);
   const [uploadDescription, setUploadDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const supersededQuoteIds = useMemo(
+    () => new Set(
+      quotes
+        .map((quote) => quote.parent_quote_id)
+        .filter((parentId): parentId is string => Boolean(parentId))
+    ),
+    [quotes]
+  );
+
+  const quoteRevisionGroups = useMemo(() => {
+    if (quotes.length === 0) return [];
+
+    const quotesById = new Map(quotes.map((quote) => [quote.id, quote]));
+
+    const getRootQuoteId = (quote: Quote): string => {
+      let current = quote;
+      const seen = new Set<string>([quote.id]);
+
+      while (current.parent_quote_id) {
+        const parent = quotesById.get(current.parent_quote_id);
+        if (!parent || seen.has(parent.id)) break;
+        seen.add(parent.id);
+        current = parent;
+      }
+
+      return current.id;
+    };
+
+    const grouped = new Map<string, Quote[]>();
+    for (const quote of quotes) {
+      const rootId = getRootQuoteId(quote);
+      const bucket = grouped.get(rootId) || [];
+      bucket.push(quote);
+      grouped.set(rootId, bucket);
+    }
+
+    return Array.from(grouped.entries())
+      .map(([rootId, groupedQuotes]) => {
+        const sortedQuotes = groupedQuotes.sort((a, b) => (a.version || 1) - (b.version || 1));
+        const activeQuote = [...sortedQuotes].reverse().find((quote) => !supersededQuoteIds.has(quote.id)) || sortedQuotes[sortedQuotes.length - 1];
+
+        const contractCount = contracts.filter((contract) => contract.quote_id && sortedQuotes.some((quote) => quote.id === contract.quote_id)).length;
+        const invoiceCount = invoices.filter((invoice) => invoice.quote_id && sortedQuotes.some((quote) => quote.id === invoice.quote_id)).length;
+
+        return {
+          rootId,
+          quotes: sortedQuotes,
+          activeQuote,
+          contractCount,
+          invoiceCount,
+        };
+      })
+      .sort((a, b) => {
+        const aDate = new Date(a.activeQuote?.created_at || 0).getTime();
+        const bDate = new Date(b.activeQuote?.created_at || 0).getTime();
+        return bDate - aDate;
+      });
+  }, [contracts, invoices, quotes, supersededQuoteIds]);
+
+  const activeEventQuoteId = useMemo(() => {
+    const eventQuotes = clientEvent ? quotes.filter((quote) => quote.event_id === clientEvent.id) : quotes;
+    if (eventQuotes.length === 0) return undefined;
+
+    const activeQuote = [...eventQuotes]
+      .reverse()
+      .find((quote) => !supersededQuoteIds.has(quote.id));
+
+    return activeQuote?.id || eventQuotes[eventQuotes.length - 1]?.id;
+  }, [clientEvent, quotes, supersededQuoteIds]);
+
+  const activeEventQuote = useMemo(() => {
+    if (!activeEventQuoteId) return null;
+    return quotes.find((quote) => quote.id === activeEventQuoteId) || null;
+  }, [activeEventQuoteId, quotes]);
+
+  const visibleInvoices = useMemo(() => {
+    if (showLegacyInvoices) return invoices;
+
+    return invoices.filter((invoice) => {
+      if (!invoice.quote_id || !activeEventQuoteId) return true;
+      return invoice.quote_id === activeEventQuoteId;
+    });
+  }, [activeEventQuoteId, invoices, showLegacyInvoices]);
 
   useEffect(() => {
     if (activeTab === 'messages' && client?.email) {
@@ -92,13 +199,7 @@ export default function ClientDetails() {
     }
   }, [activeTab, client?.email]);
 
-  useEffect(() => {
-    if (id) {
-      loadClient(id);
-    }
-  }, [id]);
-
-  const loadClient = async (clientId: string) => {
+  const loadClient = useCallback(async (clientId: string) => {
     try {
       const data = await clientService.getClient(clientId);
       if (data) {
@@ -132,6 +233,16 @@ export default function ClientDetails() {
         setContractDocSequences(buildDocSequenceMap(clientContracts));
         setInvoiceDocSequences(buildDocSequenceMap(clientInvoices));
 
+        const [quoteStatusMap, contractStatusMap, invoiceStatusMap] = await Promise.all([
+          activityLogService.getDocumentNotificationStatusMap(clientId, 'quote', clientQuotes.map((quote) => quote.id)),
+          activityLogService.getDocumentNotificationStatusMap(clientId, 'contract', clientContracts.map((contract) => contract.id)),
+          activityLogService.getDocumentNotificationStatusMap(clientId, 'invoice', clientInvoices.map((invoice) => invoice.id)),
+        ]);
+
+        setQuoteNotificationStatuses(quoteStatusMap);
+        setContractNotificationStatuses(contractStatusMap);
+        setInvoiceNotificationStatuses(invoiceStatusMap);
+
         const event = events.find(e => e.client_id === clientId);
         if (event) {
           setClientEvent(event);
@@ -164,7 +275,13 @@ export default function ClientDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    if (id) {
+      loadClient(id);
+    }
+  }, [id, loadClient]);
 
   const handleDeleteQuote = async (quoteId: string) => {
     if (deleteConfirmation === quoteId) {
@@ -307,18 +424,18 @@ export default function ClientDetails() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link to="/clients" className="text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700">
+          <Link to="/clients" className="text-gray-500 dark:text-gray-400 hover:text-gray-700">
             <ArrowLeft className="h-6 w-6" />
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">{client.first_name} {client.last_name}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{client.first_name} {client.last_name}</h1>
         </div>
         <div className="flex space-x-3">
           <Link
             to={`/portal/${client.id}`}
             target="_blank"
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
           >
-            <Layout className="h-5 w-5 mr-2 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+            <Layout className="h-5 w-5 mr-2 text-gray-500 dark:text-gray-400" />
             View Portal
           </Link>
           <Link
@@ -332,8 +449,8 @@ export default function ClientDetails() {
       </div>
 
       {clientEvent && (
-        <div className="mt-4 flex items-center space-x-6 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 border border-pink-200 bg-secondary rounded-md p-2">
-          <div className="flex items-center">
+        <div className="mt-4 flex items-center space-x-6 text-sm text-gray-500 dark:text-gray-400 border border-pink-200 bg-secondary rounded-md p-2">
+          <div className={`flex items-center ${isPastDate(clientEvent.date) ? 'text-red-600 dark:text-red-400' : ''}`}>
             <Calendar className="mr-1.5 h-4 w-4 text-primary" />
             {clientEvent.date}
           </div>
@@ -354,7 +471,7 @@ export default function ClientDetails() {
         </div>
       )}
 
-      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 overflow-x-auto">
+      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
           {tabs.map((tab) => (
             <button
@@ -374,12 +491,12 @@ export default function ClientDetails() {
 
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Client Information</h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Personal details and contact information.</p>
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Client Information</h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Personal details and contact information.</p>
           </div>
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 px-4 py-5 sm:px-6">
+          <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
             <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
               <div className="sm:col-span-1">
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Full Name</dt>
@@ -465,62 +582,62 @@ export default function ClientDetails() {
           </div>
 
           {/* Event Contacts Section */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
             <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
               <div>
-                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Event Contacts</h3>
-                <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Key contacts associated with this event.</p>
+                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Event Contacts</h3>
+                <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Key contacts associated with this event.</p>
               </div>
             </div>
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 px-4 py-5 sm:px-6">
+            <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {/* Primary Client */}
-                <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700 dark:border-gray-700">
+                <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-primary uppercase tracking-wider">Primary Client</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{client.role}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{client.role}</span>
                   </div>
-                  <div className="font-medium text-gray-900 dark:text-white dark:text-white">{client.first_name} {client.last_name}</div>
-                  <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1 flex items-center"><Mail className="h-3 w-3 mr-1"/> {client.email}</div>
-                  {client.phone && <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(client.phone)}</div>}
+                  <div className="font-medium text-gray-900 dark:text-white">{client.first_name} {client.last_name}</div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center"><Mail className="h-3 w-3 mr-1"/> {client.email}</div>
+                  {client.phone && <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(client.phone)}</div>}
                 </div>
 
                 {/* Secondary Client */}
                 {secondaryClient ? (
-                  <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700 dark:border-gray-700">
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Secondary Client</span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{secondaryClient.role}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{secondaryClient.role}</span>
                     </div>
-                    <div className="font-medium text-gray-900 dark:text-white dark:text-white">{secondaryClient.first_name} {secondaryClient.last_name}</div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1 flex items-center"><Mail className="h-3 w-3 mr-1"/> {secondaryClient.email}</div>
-                    {secondaryClient.phone && <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(secondaryClient.phone)}</div>}
+                    <div className="font-medium text-gray-900 dark:text-white">{secondaryClient.first_name} {secondaryClient.last_name}</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center"><Mail className="h-3 w-3 mr-1"/> {secondaryClient.email}</div>
+                    {secondaryClient.phone && <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(secondaryClient.phone)}</div>}
                   </div>
                 ) : (
-                  <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700 dark:border-gray-700 border-dashed flex flex-col items-center justify-center text-gray-400 h-full min-h-[120px]">
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700 border-dashed flex flex-col items-center justify-center text-gray-400 h-full min-h-[120px]">
                     <span className="text-sm">No Secondary Client</span>
                   </div>
                 )}
 
                 {/* Planner */}
                 {(planner || clientEvent?.planner_name || clientEvent?.planner_first_name) && (
-                  <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700 dark:border-gray-700">
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-semibold text-purple-600 uppercase tracking-wider">Planner</span>
                     </div>
                     {planner ? (
                       <>
-                        <div className="font-medium text-gray-900 dark:text-white dark:text-white">{planner.first_name} {planner.last_name}</div>
+                        <div className="font-medium text-gray-900 dark:text-white">{planner.first_name} {planner.last_name}</div>
                         <div className="text-sm text-gray-600">{planner.company}</div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1 flex items-center"><Mail className="h-3 w-3 mr-1"/> {planner.email}</div>
-                        {planner.phone && <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(planner.phone)}</div>}
+                        <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center"><Mail className="h-3 w-3 mr-1"/> {planner.email}</div>
+                        {planner.phone && <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(planner.phone)}</div>}
                       </>
                     ) : (
                       <>
-                        <div className="font-medium text-gray-900 dark:text-white dark:text-white">{clientEvent?.planner_first_name} {clientEvent?.planner_last_name}</div>
+                        <div className="font-medium text-gray-900 dark:text-white">{clientEvent?.planner_first_name} {clientEvent?.planner_last_name}</div>
                         <div className="text-sm text-gray-600">{clientEvent?.planner_company}</div>
-                        {clientEvent?.planner_email && <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1 flex items-center"><Mail className="h-3 w-3 mr-1"/> {clientEvent.planner_email}</div>}
-                        {clientEvent?.planner_phone && <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(clientEvent.planner_phone)}</div>}
+                        {clientEvent?.planner_email && <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center"><Mail className="h-3 w-3 mr-1"/> {clientEvent.planner_email}</div>}
+                        {clientEvent?.planner_phone && <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(clientEvent.planner_phone)}</div>}
                       </>
                     )}
                   </div>
@@ -528,25 +645,25 @@ export default function ClientDetails() {
 
                 {/* Venue Contact */}
                 {(venue || clientEvent?.venue_contact_name) && (
-                  <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700 dark:border-gray-700">
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-semibold text-green-600 uppercase tracking-wider">Venue Contact</span>
                     </div>
-                    <div className="font-medium text-gray-900 dark:text-white dark:text-white">{clientEvent?.venue_contact_name || 'N/A'}</div>
-                    {clientEvent?.venue_contact_email && <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1 flex items-center"><Mail className="h-3 w-3 mr-1"/> {clientEvent.venue_contact_email}</div>}
-                    {clientEvent?.venue_contact_phone && <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(clientEvent.venue_contact_phone)}</div>}
+                    <div className="font-medium text-gray-900 dark:text-white">{clientEvent?.venue_contact_name || 'N/A'}</div>
+                    {clientEvent?.venue_contact_email && <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center"><Mail className="h-3 w-3 mr-1"/> {clientEvent.venue_contact_email}</div>}
+                    {clientEvent?.venue_contact_phone && <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(clientEvent.venue_contact_phone)}</div>}
                     <div className="text-xs text-gray-400 mt-2">{venue?.name || clientEvent?.venue_name}</div>
                   </div>
                 )}
 
                 {/* Day of Coordinator */}
                 {clientEvent?.day_of_contact_name && (
-                  <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700 dark:border-gray-700">
+                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-semibold text-orange-600 uppercase tracking-wider">Day-of Coordinator</span>
                     </div>
-                    <div className="font-medium text-gray-900 dark:text-white dark:text-white">{clientEvent.day_of_contact_name}</div>
-                    {clientEvent.day_of_contact_phone && <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(clientEvent.day_of_contact_phone)}</div>}
+                    <div className="font-medium text-gray-900 dark:text-white">{clientEvent.day_of_contact_name}</div>
+                    {clientEvent.day_of_contact_phone && <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center"><Phone className="h-3 w-3 mr-1"/> {formatPhoneNumber(clientEvent.day_of_contact_phone)}</div>}
                   </div>
                 )}
               </div>
@@ -556,9 +673,9 @@ export default function ClientDetails() {
       )}
 
       {activeTab === 'quotes' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Quotes</h3>
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Quotes</h3>
             <button 
               onClick={() => navigate(`/quotes/new?clientId=${client.id}`)}
               className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-primary hover:bg-primary/90"
@@ -566,10 +683,34 @@ export default function ClientDetails() {
               <Plus className="h-4 w-4 mr-1" /> Create Quote
             </button>
           </div>
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700">
+          <div className="border-t border-gray-200 dark:border-gray-700">
+            {quoteRevisionGroups.length > 0 && (
+              <div className="px-4 py-4 sm:px-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Revision History</h4>
+                <div className="space-y-2">
+                  {quoteRevisionGroups.map((group) => (
+                    <div key={group.rootId} className="text-xs text-gray-600 dark:text-gray-300 flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-gray-800 dark:text-gray-200">Chain:</span>
+                      <span>{group.quotes.map((quote) => `v${quote.version || 1}`).join(' → ')}</span>
+                      <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-semibold">
+                        Active v{group.activeQuote?.version || 1}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold">
+                        {group.contractCount} contract(s)
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-semibold">
+                        {group.invoiceCount} invoice(s)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {quotes.length > 0 ? (
               <ul className="divide-y divide-gray-200">
                 {quotes.map((quote) => {
+                  const quoteNotification = quoteNotificationStatuses[quote.id] || null;
+                  const isSupersededQuote = supersededQuoteIds.has(quote.id);
                   const quoteDocumentId = resolveDocumentId('QT', quote, {
                     eventsMap,
                     eventSequences,
@@ -579,7 +720,7 @@ export default function ClientDetails() {
                   const quoteTotals = calculateQuoteTotals(quote);
 
                   return (
-                    <li key={quote.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 flex items-center justify-between group">
+                    <li key={quote.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 flex items-center justify-between group">
                     <div 
                       className="flex-1 cursor-pointer"
                       onClick={() => navigate(`/quotes/${quote.id}`)}
@@ -589,7 +730,10 @@ export default function ClientDetails() {
                           <span className="text-sm font-medium text-primary truncate">
                             {quoteDocumentId}
                           </span>
-                          <span className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                          <span className="text-xs text-gray-400 dark:text-gray-500">
+                            Revision v{quote.version || 1}
+                          </span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
                             Total: {formatCurrency(quoteTotals.totalMXN, 'MXN')}
                           </span>
                           {quoteTotals.convertedAmount !== null && (
@@ -600,10 +744,24 @@ export default function ClientDetails() {
                         </div>
                         <div className="flex items-center">
                           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            quote.status === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            quote.status === 'accepted'
+                              ? 'bg-green-100 text-green-800'
+                              : quote.status === 'rejected'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-yellow-100 text-yellow-800'
                           }`}>
                             {quote.status.toUpperCase()}
                           </span>
+                          {isSupersededQuote && (
+                            <span className="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-700">
+                              SUPERSEDED
+                            </span>
+                          )}
+                          {quoteNotification && (
+                            <span className="ml-2">
+                              <NotificationStatus status={quoteNotification} variant="badge" />
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -611,13 +769,13 @@ export default function ClientDetails() {
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={(e) => { e.stopPropagation(); navigate(`/quotes/${quote.id}`); }}
-                        className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                        className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                       >
                         <Eye className="h-4 w-4 mr-1" /> View
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); navigate(`/quotes/${quote.id}/edit`); }}
-                        className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white dark:bg-gray-800 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                       >
                         <Edit className="h-4 w-4 mr-1" /> Edit
                       </button>
@@ -632,7 +790,7 @@ export default function ClientDetails() {
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); setDeleteConfirmation(null); }}
-                            className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                            className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
                           >
                             <X className="h-4 w-4 mr-1" /> Cancel
                           </button>
@@ -640,7 +798,7 @@ export default function ClientDetails() {
                       ) : (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDeleteQuote(quote.id); }}
-                          className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                          className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                         >
                           <Trash2 className="h-4 w-4 mr-1" /> Delete
                         </button>
@@ -651,21 +809,21 @@ export default function ClientDetails() {
                 })}
               </ul>
             ) : (
-              <div className="p-6 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">No quotes found.</div>
+              <div className="p-6 text-center text-gray-500 dark:text-gray-400">No quotes found.</div>
             )}
           </div>
         </div>
       )}
 
       {activeTab === 'questionnaires' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Questionnaires</h3>
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Questionnaires</h3>
             <button className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-primary hover:bg-primary/90">
               <Plus className="h-4 w-4 mr-1" /> Assign Questionnaire
             </button>
           </div>
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700">
+          <div className="border-t border-gray-200 dark:border-gray-700">
             {questionnaires.length > 0 ? (
               <ul className="divide-y divide-gray-200">
                 {questionnaires.map((q) => {
@@ -676,13 +834,13 @@ export default function ClientDetails() {
                     fallbackEvent: clientEvent
                   });
                   return (
-                  <li key={q.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 group">
+                  <li key={q.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 group">
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-primary truncate">
                           {questionnaireId}
                         </span>
-                        <span className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{q.title}</span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">{q.title}</span>
                       </div>
                       <div className="flex items-center space-x-4">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -699,7 +857,7 @@ export default function ClientDetails() {
                                 navigate(`/questionnaires/${q.id}`);
                               }
                             }}
-                            className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                            className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                           >
                             <Eye className="h-4 w-4 mr-1" /> View
                           </button>
@@ -711,24 +869,26 @@ export default function ClientDetails() {
                 })}
               </ul>
             ) : (
-              <div className="p-6 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">No questionnaires found.</div>
+              <div className="p-6 text-center text-gray-500 dark:text-gray-400">No questionnaires found.</div>
             )}
           </div>
         </div>
       )}
 
       {activeTab === 'contracts' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Contracts</h3>
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Contracts</h3>
             <button className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-primary hover:bg-primary/90">
               <Plus className="h-4 w-4 mr-1" /> Generate Contract
             </button>
           </div>
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700">
+          <div className="border-t border-gray-200 dark:border-gray-700">
             {contracts.length > 0 ? (
               <ul className="divide-y divide-gray-200">
                 {contracts.map((c) => {
+                  const contractNotification = contractNotificationStatuses[c.id] || null;
+                  const isSupersededContract = c.quote_id ? supersededQuoteIds.has(c.quote_id) : false;
                   const contractId = resolveDocumentId('CON', c, {
                     eventsMap,
                     eventSequences,
@@ -736,14 +896,17 @@ export default function ClientDetails() {
                     fallbackEvent: clientEvent
                   });
                   return (
-                  <li key={c.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 group">
+                  <li key={c.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 group">
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-primary truncate">
                           {contractId}
                         </span>
-                        <span className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Service Agreement</span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Service Agreement</span>
                         <span className="text-xs text-gray-400 dark:text-gray-500">Updated {new Date(c.updated_at || c.created_at).toLocaleDateString()}</span>
+                        {isSupersededContract && (
+                          <span className="text-xs text-gray-500">Linked to superseded quote revision</span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-4">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -751,6 +914,9 @@ export default function ClientDetails() {
                         }`}>
                           {c.status.toUpperCase()}
                         </span>
+                        {contractNotification && (
+                          <NotificationStatus status={contractNotification} variant="badge" />
+                        )}
                         <div className="flex items-center space-x-2">
                           <button
                             onClick={() => navigate(`/contracts/${c.id}`)}
@@ -766,24 +932,56 @@ export default function ClientDetails() {
                 })}
               </ul>
             ) : (
-              <div className="p-6 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">No contracts found.</div>
+              <div className="p-6 text-center text-gray-500 dark:text-gray-400">No contracts found.</div>
             )}
           </div>
         </div>
       )}
 
       {activeTab === 'invoices' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Invoices</h3>
-            <button className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-primary hover:bg-primary/90">
-              <Plus className="h-4 w-4 mr-1" /> Create Invoice
-            </button>
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Invoices</h3>
+            <div className="flex items-center space-x-3">
+              <label className="inline-flex items-center text-xs text-gray-600 dark:text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={showLegacyInvoices}
+                  onChange={(e) => setShowLegacyInvoices(e.target.checked)}
+                  className="mr-2 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                Show legacy invoices
+              </label>
+              <button className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-primary hover:bg-primary/90">
+                <Plus className="h-4 w-4 mr-1" /> Create Invoice
+              </button>
+            </div>
           </div>
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700">
-            {invoices.length > 0 ? (
+          <div className="border-t border-gray-200 dark:border-gray-700">
+            {visibleInvoices.length > 0 && (
+              <div className="px-4 py-4 sm:px-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Invoice Labels</h4>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-green-100 text-green-800">CURRENT REVISION</span>
+                  <span>Invoice linked to the latest quote revision.</span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-gray-100 text-gray-700">LEGACY REVISION</span>
+                  <span>Invoice from an earlier quote version kept for history.</span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-indigo-100 text-indigo-800">CREDIT</span>
+                  <span>Adjustment/payment credit carried into the active revision.</span>
+                </div>
+              </div>
+            )}
+            {visibleInvoices.length > 0 ? (
               <ul className="divide-y divide-gray-200">
-                {invoices.map((inv) => {
+                {visibleInvoices.map((inv) => {
+                  const invoiceNotification = invoiceNotificationStatuses[inv.id] || null;
+                  const isSupersededInvoice = inv.quote_id ? supersededQuoteIds.has(inv.quote_id) : false;
+                  const isCreditInvoice = inv.type === 'change_order' || inv.total_amount < 0;
+                  const isLegacyRevision = Boolean(inv.quote_id && activeEventQuoteId && inv.quote_id !== activeEventQuoteId);
                   const invoiceId = resolveDocumentId('INV', inv, {
                     eventsMap,
                     eventSequences,
@@ -791,7 +989,7 @@ export default function ClientDetails() {
                     fallbackEvent: clientEvent
                   });
                   return (
-                  <li key={inv.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 flex items-center justify-between group">
+                  <li key={inv.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 flex items-center justify-between group">
                     <div className="flex-1 cursor-pointer" onClick={() => navigate(`/invoices/${inv.id}`)}>
                       <div className="flex items-center justify-between mr-4">
                         <div className="flex flex-col">
@@ -800,6 +998,9 @@ export default function ClientDetails() {
                           </span>
                           <span className="text-sm text-gray-500 dark:text-gray-400">Due: {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : 'TBD'}</span>
                           <span className="text-xs text-gray-400 dark:text-gray-500">Issued {new Date(inv.created_at).toLocaleDateString()}</span>
+                          {isSupersededInvoice && (
+                            <span className="text-xs text-gray-500">Linked to superseded quote revision</span>
+                          )}
                         </div>
                         <div className="flex items-center space-x-4">
                           <span className="text-sm font-bold text-gray-900 dark:text-white">{formatCurrency(inv.total_amount, 'MXN')}</span>
@@ -812,10 +1013,40 @@ export default function ClientDetails() {
                           }`}>
                             {inv.status.toUpperCase()}
                           </span>
+                          {invoiceNotification && (
+                            <NotificationStatus status={invoiceNotification} variant="badge" />
+                          )}
+                          {isCreditInvoice && (
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800">
+                              CREDIT
+                            </span>
+                          )}
+                          {isLegacyRevision ? (
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-700">
+                              LEGACY REVISION
+                            </span>
+                          ) : (
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                              CURRENT REVISION
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
+                      {isLegacyRevision && activeEventQuote && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(buildQuotePathFromLegacyInvoice(activeEventQuote.id, { invoiceId: inv.id }));
+                          }}
+                          title="View active quote"
+                          aria-label="View active quote"
+                          className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white dark:bg-gray-800 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        >
+                          View active quote
+                        </button>
+                      )}
                       <button
                         onClick={(e) => { e.stopPropagation(); navigate(`/invoices/${inv.id}`); }}
                         className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
@@ -828,7 +1059,7 @@ export default function ClientDetails() {
                 })}
               </ul>
             ) : (
-              <div className="p-6 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">No invoices found.</div>
+              <div className="p-6 text-center text-gray-500 dark:text-gray-400">No invoices found for the current filter.</div>
             )}
           </div>
         </div>
@@ -851,9 +1082,9 @@ export default function ClientDetails() {
       )}
 
       {activeTab === 'tasks' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
-          <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Tasks</h3>
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Tasks</h3>
             <div className="flex space-x-2">
               <select 
                 onChange={(e) => {
@@ -879,7 +1110,7 @@ export default function ClientDetails() {
           </div>
           
           {isAddingTask && (
-            <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+            <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
               <form onSubmit={handleAddTask} className="flex gap-2 items-start sm:items-center flex-col sm:flex-row">
                 <input
                   type="text"
@@ -909,7 +1140,7 @@ export default function ClientDetails() {
                   <button
                     type="button"
                     onClick={() => setIsAddingTask(false)}
-                    className="flex-1 sm:flex-none inline-flex justify-center items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="flex-1 sm:flex-none inline-flex justify-center items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                   >
                     Cancel
                   </button>
@@ -921,7 +1152,7 @@ export default function ClientDetails() {
           <ul className="divide-y divide-gray-200">
             {tasks.length > 0 ? (
               tasks.map((task) => (
-                <li key={task.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 flex items-center justify-between group">
+                <li key={task.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 flex items-center justify-between group">
                   <div className="flex items-center min-w-0 flex-1">
                     <button
                       onClick={() => handleToggleTask(task.id, task.status)}
@@ -934,7 +1165,7 @@ export default function ClientDetails() {
                       <Check className="h-3.5 w-3.5" />
                     </button>
                     <div className="ml-4 flex-1">
-                      <p className={`text-sm font-medium ${task.status === 'completed' ? 'text-gray-500 dark:text-gray-400 dark:text-gray-400 line-through' : 'text-gray-900 dark:text-white dark:text-white'}`}>
+                      <p className={`text-sm font-medium ${task.status === 'completed' ? 'text-gray-500 dark:text-gray-400 line-through' : 'text-gray-900 dark:text-white'}`}>
                         {task.title}
                       </p>
                       <div className="flex flex-wrap items-center gap-2 mt-0.5">
@@ -944,7 +1175,7 @@ export default function ClientDetails() {
                           </span>
                         )}
                         {task.status === 'completed' && task.completed_at && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                             Completed by {task.completed_by} on {new Date(task.completed_at).toLocaleDateString()} at {new Date(task.completed_at).toLocaleTimeString()}
                           </span>
                         )}
@@ -954,7 +1185,7 @@ export default function ClientDetails() {
                   <div className="ml-4 shrink-0">
                     <button
                       onClick={() => handleDeleteTask(task.id)}
-                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     >
                       <Trash2 className="h-4 w-4 mr-1" /> Delete
                     </button>
@@ -962,7 +1193,7 @@ export default function ClientDetails() {
                 </li>
               ))
             ) : (
-              <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">
+              <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                 No tasks yet. Add one or import from a template.
               </li>
             )}
@@ -975,9 +1206,9 @@ export default function ClientDetails() {
       )}
 
       {activeTab === 'files' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
-          <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Files</h3>
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Files</h3>
             <button 
               onClick={() => setIsUploading(true)}
               className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-primary hover:bg-primary/90"
@@ -987,14 +1218,14 @@ export default function ClientDetails() {
           </div>
 
           {isUploading && (
-            <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+            <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
               <form onSubmit={handleUploadFile} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">File</label>
                   <input
                     type="file"
                     onChange={(e) => setSelectedFile(e.target.files ? e.target.files[0] : null)}
-                    className="mt-1 block w-full text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-secondary file:text-accent hover:file:bg-pink-100"
+                    className="mt-1 block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-secondary file:text-accent hover:file:bg-pink-100"
                     required
                   />
                 </div>
@@ -1017,7 +1248,7 @@ export default function ClientDetails() {
                       setSelectedFile(null);
                       setUploadDescription('');
                     }}
-                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                   >
                     Cancel
                   </button>
@@ -1036,18 +1267,18 @@ export default function ClientDetails() {
           <ul className="divide-y divide-gray-200">
             {files.length > 0 ? (
               files.map((file) => (
-                <li key={file.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 flex items-center justify-between group">
+                <li key={file.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 flex items-center justify-between group">
                   <div className="flex items-center min-w-0 flex-1">
                     <div className="shrink-0 h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center">
                       {file.type.startsWith('image/') ? (
-                        <ImageIcon className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+                        <ImageIcon className="h-6 w-6 text-gray-500 dark:text-gray-400" />
                       ) : (
-                        <FileText className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+                        <FileText className="h-6 w-6 text-gray-500 dark:text-gray-400" />
                       )}
                     </div>
                     <div className="ml-4 flex-1">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white dark:text-white truncate">{file.name}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{file.description}</p>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{file.description}</p>
                       <p className="text-xs text-gray-400 mt-0.5">
                         {(file.size / 1024 / 1024).toFixed(2)} MB • Uploaded by {file.uploaded_by} on {new Date(file.uploaded_at).toLocaleDateString()}
                       </p>
@@ -1058,14 +1289,14 @@ export default function ClientDetails() {
                       href={file.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                     >
                       <Eye className="h-4 w-4 mr-1" /> View
                     </a>
                     <a
                       href={file.url}
                       download={file.name}
-                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-blue-700 bg-white dark:bg-gray-800 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                     >
                       <Download className="h-4 w-4 mr-1" /> Download
                     </a>
@@ -1080,7 +1311,7 @@ export default function ClientDetails() {
                         </button>
                         <button
                           onClick={() => setDeleteConfirmation(null)}
-                          className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                          className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
                         >
                           <X className="h-4 w-4 mr-1" /> Cancel
                         </button>
@@ -1088,7 +1319,7 @@ export default function ClientDetails() {
                     ) : (
                       <button
                         onClick={() => setDeleteConfirmation(file.id)}
-                        className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                        className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                       >
                         <Trash2 className="h-4 w-4 mr-1" /> Delete
                       </button>
@@ -1097,7 +1328,7 @@ export default function ClientDetails() {
                 </li>
               ))
             ) : (
-              <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">
+              <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                 No files uploaded yet.
               </li>
             )}
@@ -1110,13 +1341,13 @@ export default function ClientDetails() {
       )}
 
       {activeTab !== 'overview' && activeTab !== 'notes' && activeTab !== 'quotes' && activeTab !== 'questionnaires' && activeTab !== 'contracts' && activeTab !== 'invoices' && activeTab !== 'tasks' && activeTab !== 'files' && activeTab !== 'portal' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg p-12 text-center">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg p-12 text-center">
           {activeTab === 'messages' && <MessageSquare className="mx-auto h-12 w-12 text-gray-400" />}
           
-          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white dark:text-white">
+          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
             {tabs.find(t => t.id === activeTab)?.label}
           </h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">This feature is coming soon.</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">This feature is coming soon.</p>
         </div>
       )}
     </div>

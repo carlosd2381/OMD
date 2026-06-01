@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Globe, Mail, Phone, User, MessageSquare, FileText, Plus, Check, Trash2, MapPin, RefreshCw, ExternalLink, Truck } from 'lucide-react';
 import { venueService } from '../../services/venueService';
@@ -40,13 +40,7 @@ export default function VenueDetails() {
   const [newTaskAssignee, setNewTaskAssignee] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    if (id) {
-      loadVenue(id);
-    }
-  }, [id]);
-
-  const loadVenue = async (venueId: string) => {
+  const loadVenue = useCallback(async (venueId: string) => {
     try {
       const [venueData, contactsData, eventsData, tasksData, usersData, templatesData, deliverySettingsData] = await Promise.all([
         venueService.getVenue(venueId),
@@ -98,7 +92,13 @@ export default function VenueDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    if (id) {
+      void loadVenue(id);
+    }
+  }, [id, loadVenue]);
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -262,10 +262,10 @@ export default function VenueDetails() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link to="/venues" className="text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700">
+          <Link to="/venues" className="text-gray-500 dark:text-gray-400 hover:text-gray-700">
             <ArrowLeft className="h-6 w-6" />
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">{venue.name}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{venue.name}</h1>
         </div>
         <Link
           to={`/venues/${venue.id}/edit`}
@@ -276,7 +276,7 @@ export default function VenueDetails() {
         </Link>
       </div>
 
-      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 overflow-x-auto">
+      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
           {tabs.map((tab) => (
             <button
@@ -285,7 +285,7 @@ export default function VenueDetails() {
               className={`${
                 activeTab === tab.id
                   ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
               {tab.label}
@@ -295,32 +295,32 @@ export default function VenueDetails() {
       </div>
 
       {activeTab === 'overview' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Venue Overview</h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Details and contact information.</p>
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Venue Overview</h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Details and contact information.</p>
           </div>
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 px-4 py-5 sm:px-6">
+          <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
             <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Venue Name</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{venue.name}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Venue Name</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{venue.name}</dd>
               </div>
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Area</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{venue.venue_area || 'N/A'}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Area</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">{venue.venue_area || 'N/A'}</dd>
               </div>
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Address</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Address</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">
                   {venue.address}<br />
                   {venue.city && `${venue.city}, `}{venue.state} {venue.zip_code}<br />
                   {venue.country}
                 </dd>
               </div>
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Contact Info</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white space-y-1">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Contact Info</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white space-y-1">
                   {venue.email && (
                     <div className="flex items-center">
                       <Mail className="h-4 w-4 mr-2 text-gray-400" />
@@ -330,7 +330,7 @@ export default function VenueDetails() {
                   {venue.phone && (
                     <div className="flex items-center">
                       <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                      <a href={`tel:${venue.phone}`} className="text-gray-900 dark:text-white dark:text-white hover:text-gray-700">{formatPhoneNumber(venue.phone)}</a>
+                      <a href={`tel:${venue.phone}`} className="text-gray-900 dark:text-white hover:text-gray-700">{formatPhoneNumber(venue.phone)}</a>
                     </div>
                   )}
                   {venue.website && (
@@ -343,24 +343,24 @@ export default function VenueDetails() {
               </div>
               {venue.notes && (
                 <div className="sm:col-span-2">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Notes</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white whitespace-pre-wrap">{venue.notes}</dd>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Notes</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white whitespace-pre-wrap">{venue.notes}</dd>
                 </div>
               )}
             </dl>
           </div>
 
           {/* Google Maps & Travel Info Section */}
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 px-4 py-5 sm:px-6">
+          <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white flex items-center">
+              <h4 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
                 <MapPin className="h-5 w-5 mr-2 text-gray-400" />
                 Location & Travel Details
               </h4>
               <button
                 onClick={handleRefreshGoogleData}
                 disabled={isRefreshing}
-                className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
               >
                 <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
                 Refresh Data
@@ -368,8 +368,8 @@ export default function VenueDetails() {
             </div>
             <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Coordinates</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Coordinates</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">
                   {venue.latitude && venue.longitude ? (
                     <div className="flex items-center">
                       <span>{venue.latitude.toFixed(6)}, {venue.longitude.toFixed(6)}</span>
@@ -391,8 +391,8 @@ export default function VenueDetails() {
                 </dd>
               </div>
               <div className="sm:col-span-1">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Travel from HQ</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Travel from HQ</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-white">
                   {venue.travel_distance_km !== undefined && venue.travel_time_mins !== undefined ? (
                     <div>
                       <span className="font-medium">{venue.travel_distance_km} km</span>
@@ -410,10 +410,10 @@ export default function VenueDetails() {
       )}
 
       {activeTab === 'contacts' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Contacts</h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Associated contacts for this venue.</p>
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Contacts</h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Associated contacts for this venue.</p>
           </div>
           {contacts.length > 0 ? (
             <ul className="divide-y divide-gray-200">
@@ -422,10 +422,10 @@ export default function VenueDetails() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
                       <div className="shrink-0">
-                        <User className="h-10 w-10 rounded-full bg-gray-100 p-2 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+                        <User className="h-10 w-10 rounded-full bg-gray-100 p-2 text-gray-500 dark:text-gray-400" />
                       </div>
                       <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900 dark:text-white dark:text-white">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">
                           {contact.first_name} {contact.last_name}
                           {contact.is_primary && (
                             <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -433,19 +433,19 @@ export default function VenueDetails() {
                             </span>
                           )}
                         </div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{contact.role}</div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">{contact.role}</div>
                       </div>
                     </div>
                     <div className="text-right text-sm">
-                      <div className="text-gray-900 dark:text-white dark:text-white">{contact.email}</div>
-                      <div className="text-gray-500 dark:text-gray-400 dark:text-gray-400">{formatPhoneNumber(contact.phone)}</div>
+                      <div className="text-gray-900 dark:text-white">{contact.email}</div>
+                      <div className="text-gray-500 dark:text-gray-400">{formatPhoneNumber(contact.phone)}</div>
                     </div>
                   </div>
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="px-4 py-5 sm:px-6 text-gray-500 dark:text-gray-400 dark:text-gray-400 text-sm">
+            <div className="px-4 py-5 sm:px-6 text-gray-500 dark:text-gray-400 text-sm">
               No contacts found for this venue.
             </div>
           )}
@@ -457,26 +457,26 @@ export default function VenueDetails() {
       )}
 
       {activeTab === 'events' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Events</h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Events scheduled at this venue.</p>
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Events</h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Events scheduled at this venue.</p>
           </div>
           {events.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Date
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Event Name
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Client
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Planner
                     </th>
                     <th scope="col" className="relative px-6 py-3">
@@ -484,20 +484,20 @@ export default function VenueDetails() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 dark:bg-gray-800 divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200">
                   {events.map((event) => {
                     const client = event.client_id ? clientsMap[event.client_id] : null;
                     const planner = event.planner_id ? plannersMap[event.planner_id] : null;
                     
                     return (
                       <tr key={event.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white dark:text-white">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                           {new Date(event.date).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white dark:text-white">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                           {event.name}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                           {client ? (
                             <Link to={`/clients/${client.id}`} className="text-primary hover:text-pink-900">
                               {client.first_name} {client.last_name}
@@ -506,7 +506,7 @@ export default function VenueDetails() {
                             <span className="text-gray-400">-</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                           {planner ? (
                             <Link to={`/planners/${planner.id}`} className="text-primary hover:text-pink-900">
                               {planner.first_name} {planner.last_name}
@@ -529,7 +529,7 @@ export default function VenueDetails() {
               </table>
             </div>
           ) : (
-            <div className="px-4 py-5 sm:px-6 text-gray-500 dark:text-gray-400 dark:text-gray-400 text-sm">
+            <div className="px-4 py-5 sm:px-6 text-gray-500 dark:text-gray-400 text-sm">
               No events found for this venue.
             </div>
           )}
@@ -537,9 +537,9 @@ export default function VenueDetails() {
       )}
 
       {activeTab === 'tasks' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
-          <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Tasks</h3>
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Tasks</h3>
             <div className="flex space-x-2">
               <select 
                 onChange={(e) => {
@@ -565,7 +565,7 @@ export default function VenueDetails() {
           </div>
           
           {isAddingTask && (
-            <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+            <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
               <form onSubmit={handleAddTask} className="flex gap-2 items-start sm:items-center flex-col sm:flex-row">
                 <input
                   type="text"
@@ -595,7 +595,7 @@ export default function VenueDetails() {
                   <button
                     type="button"
                     onClick={() => setIsAddingTask(false)}
-                    className="flex-1 sm:flex-none inline-flex justify-center items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="flex-1 sm:flex-none inline-flex justify-center items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                   >
                     Cancel
                   </button>
@@ -607,7 +607,7 @@ export default function VenueDetails() {
           <ul className="divide-y divide-gray-200">
             {tasks.length > 0 ? (
               tasks.map((task) => (
-                <li key={task.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 flex items-center justify-between group">
+                <li key={task.id} className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:bg-gray-700 flex items-center justify-between group">
                   <div className="flex items-center min-w-0 flex-1">
                     <button
                       onClick={() => handleToggleTask(task.id, task.status)}
@@ -620,7 +620,7 @@ export default function VenueDetails() {
                       <Check className="h-3.5 w-3.5" />
                     </button>
                     <div className="ml-4 flex-1">
-                      <p className={`text-sm font-medium ${task.status === 'completed' ? 'text-gray-500 dark:text-gray-400 dark:text-gray-400 line-through' : 'text-gray-900 dark:text-white dark:text-white'}`}>
+                      <p className={`text-sm font-medium ${task.status === 'completed' ? 'text-gray-500 dark:text-gray-400 line-through' : 'text-gray-900 dark:text-white'}`}>
                         {task.title}
                       </p>
                       <div className="flex flex-wrap items-center gap-2 mt-0.5">
@@ -630,7 +630,7 @@ export default function VenueDetails() {
                           </span>
                         )}
                         {task.status === 'completed' && task.completed_at && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                             Completed by {task.completed_by} on {new Date(task.completed_at).toLocaleDateString()} at {new Date(task.completed_at).toLocaleTimeString()}
                           </span>
                         )}
@@ -640,7 +640,7 @@ export default function VenueDetails() {
                   <div className="ml-4 shrink-0">
                     <button
                       onClick={() => handleDeleteTask(task.id)}
-                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white dark:bg-gray-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     >
                       <Trash2 className="h-4 w-4 mr-1" /> Delete
                     </button>
@@ -648,7 +648,7 @@ export default function VenueDetails() {
                 </li>
               ))
             ) : (
-              <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">
+              <li className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                 No tasks yet. Add one or import from a template.
               </li>
             )}
@@ -657,11 +657,11 @@ export default function VenueDetails() {
       )}
 
       {activeTab === 'settings' && venue && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Venue Settings</h3>
-            <div className="mt-6 border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-6">
-              <h4 className="text-md font-medium text-gray-900 dark:text-white dark:text-white flex items-center">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Venue Settings</h3>
+            <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
+              <h4 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
                 <Truck className="h-5 w-5 mr-2 text-gray-400" />
                 Flete (Delivery Fee)
               </h4>
@@ -671,8 +671,8 @@ export default function VenueDetails() {
                     Travel Distance
                   </label>
                   <div className="mt-1 flex items-center">
-                    <span className="text-gray-900 dark:text-white dark:text-white">{venue.travel_distance_km ? `${venue.travel_distance_km.toFixed(1)} km` : 'Not calculated'}</span>
-                    <span className="ml-2 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                    <span className="text-gray-900 dark:text-white">{venue.travel_distance_km ? `${venue.travel_distance_km.toFixed(1)} km` : 'Not calculated'}</span>
+                    <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
                       (from Google Maps)
                     </span>
                   </div>
@@ -684,7 +684,7 @@ export default function VenueDetails() {
                   </label>
                   <div className="mt-1 relative rounded-md shadow-sm">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                      <span className="text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">$</span>
+                      <span className="text-gray-500 dark:text-gray-400 sm:text-sm">$</span>
                     </div>
                     <input
                       type="number"
@@ -712,7 +712,7 @@ export default function VenueDetails() {
                     <div className="absolute inset-y-0 right-0 flex items-center">
                        <button
                          type="button"
-                         className="h-full py-0 px-3 border-l border-gray-300 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm rounded-r-md hover:bg-gray-100"
+                         className="h-full py-0 px-3 border-l border-gray-300 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 sm:text-sm rounded-r-md hover:bg-gray-100"
                          onClick={async () => {
                            if (!deliverySettings) {
                              toast.error('Delivery settings not loaded');
@@ -763,7 +763,7 @@ export default function VenueDetails() {
                        </button>
                     </div>
                   </div>
-                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                     Calculated based on distance and delivery settings.
                   </p>
                 </div>
@@ -774,14 +774,14 @@ export default function VenueDetails() {
       )}
 
       {activeTab !== 'overview' && activeTab !== 'contacts' && activeTab !== 'notes' && activeTab !== 'events' && activeTab !== 'tasks' && activeTab !== 'settings' && (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg p-12 text-center">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg p-12 text-center">
           {activeTab === 'messages' && <MessageSquare className="mx-auto h-12 w-12 text-gray-400" />}
           {activeTab === 'facturas' && <FileText className="mx-auto h-12 w-12 text-gray-400" />}
           
-          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white dark:text-white">
+          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
             {tabs.find(t => t.id === activeTab)?.label}
           </h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">This feature is coming soon.</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">This feature is coming soon.</p>
         </div>
       )}
     </div>

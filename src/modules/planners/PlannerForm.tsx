@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -30,16 +30,14 @@ export default function PlannerForm() {
     resolver: zodResolver(plannerSchema),
   });
 
-  useEffect(() => {
-    if (isEditMode) {
-      loadPlanner();
+  const loadPlanner = useCallback(async () => {
+    if (!id) {
+      return;
     }
-  }, [id]);
 
-  const loadPlanner = async () => {
     try {
       setLoading(true);
-      const planner = await plannerService.getPlanner(id!);
+      const planner = await plannerService.getPlanner(id);
       if (planner) {
         reset(planner);
       } else {
@@ -51,7 +49,13 @@ export default function PlannerForm() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, navigate, reset]);
+
+  useEffect(() => {
+    if (isEditMode) {
+      loadPlanner();
+    }
+  }, [isEditMode, loadPlanner]);
 
   const onSubmit = async (data: PlannerFormData) => {
     try {
@@ -82,14 +86,14 @@ export default function PlannerForm() {
           onClick={() => navigate('/planners')}
           className="p-2 rounded-full hover:bg-gray-100"
         >
-          <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+          <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
         </button>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           {isEditMode ? 'Edit Planner' : 'New Planner'}
         </h1>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow px-4 py-5 sm:rounded-lg sm:p-6">
+      <div className="bg-white dark:bg-gray-800 shadow px-4 py-5 sm:rounded-lg sm:p-6">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
             <div className="sm:col-span-3">
@@ -221,7 +225,7 @@ export default function PlannerForm() {
             <button
               type="button"
               onClick={() => navigate('/planners')}
-              className="bg-white dark:bg-gray-800 dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+              className="bg-white dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
             >
               Cancel
             </button>

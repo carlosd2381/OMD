@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Shield, AlertTriangle, Lock, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { settingsService } from '../../services/settingsService';
+import { settingsService, type Role as DbRole } from '../../services/settingsService';
 
 type PermissionType = 'create' | 'read' | 'update' | 'delete';
 
@@ -38,6 +38,24 @@ interface Role {
 
 const DEFAULT_PERMISSIONS: ModulePermissions = { create: false, read: false, update: false, delete: false };
 
+const DEFAULT_ROLE_PERMISSIONS: Role['permissions'] = {
+  clients: DEFAULT_PERMISSIONS,
+  leads: DEFAULT_PERMISSIONS,
+  events: DEFAULT_PERMISSIONS,
+  products: DEFAULT_PERMISSIONS,
+  venues: DEFAULT_PERMISSIONS,
+  planners: DEFAULT_PERMISSIONS,
+  financials: DEFAULT_PERMISSIONS,
+  settings: DEFAULT_PERMISSIONS,
+};
+
+const DEFAULT_FIELD_SECURITY: Role['fieldSecurity'] = {
+  viewFinancialTotals: false,
+  viewClientContactInfo: false,
+  exportData: false,
+  approveContracts: false,
+};
+
 export default function RolesPermissionsSettings() {
   const navigate = useNavigate();
   const [roles, setRoles] = useState<Role[]>([]);
@@ -45,11 +63,7 @@ export default function RolesPermissionsSettings() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    loadRoles();
-  }, []);
-
-  const loadRoles = async () => {
+  const loadRoles = useCallback(async () => {
     setLoading(true);
     try {
       const data = await settingsService.getRoles();
@@ -59,34 +73,27 @@ export default function RolesPermissionsSettings() {
         name: item.name,
         description: item.description || '',
         isSystem: item.is_system || false,
-        permissions: (item.permissions as any) || {
-            clients: DEFAULT_PERMISSIONS,
-            leads: DEFAULT_PERMISSIONS,
-            events: DEFAULT_PERMISSIONS,
-            products: DEFAULT_PERMISSIONS,
-            venues: DEFAULT_PERMISSIONS,
-            planners: DEFAULT_PERMISSIONS,
-            financials: DEFAULT_PERMISSIONS,
-            settings: DEFAULT_PERMISSIONS,
-        },
-        fieldSecurity: (item.field_security as any) || {
-            viewFinancialTotals: false,
-            viewClientContactInfo: false,
-            exportData: false,
-            approveContracts: false,
-        }
+        permissions: (item.permissions as Role['permissions'] | null) || DEFAULT_ROLE_PERMISSIONS,
+        fieldSecurity: (item.field_security as Role['fieldSecurity'] | null) || DEFAULT_FIELD_SECURITY
       }));
       setRoles(mapped);
-      if (!selectedRoleId || !mapped.find(r => r.id === selectedRoleId)) {
-          setSelectedRoleId(mapped[0]?.id || '');
-      }
+      setSelectedRoleId(prevSelectedRoleId => {
+        if (!prevSelectedRoleId || !mapped.find(r => r.id === prevSelectedRoleId)) {
+          return mapped[0]?.id || '';
+        }
+        return prevSelectedRoleId;
+      });
     } catch (error) {
       console.error('Error loading roles:', error);
       toast.error('Failed to load roles');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadRoles();
+  }, [loadRoles]);
 
   const selectedRole = roles.find(r => r.id === selectedRoleId) || roles[0];
 
@@ -192,9 +199,9 @@ export default function RolesPermissionsSettings() {
             name: selectedRole.name,
             description: selectedRole.description,
             is_system: selectedRole.isSystem,
-            permissions: selectedRole.permissions as any,
-            field_security: selectedRole.fieldSecurity as any
-        };
+          permissions: selectedRole.permissions,
+          field_security: selectedRole.fieldSecurity
+        } as unknown as Partial<DbRole>;
 
         if (selectedRole.id.startsWith('new_')) {
             const newRole = await settingsService.createRole(payload);
@@ -226,11 +233,11 @@ export default function RolesPermissionsSettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Roles & Permissions</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Manage access levels for your team.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Roles & Permissions</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Manage access levels for your team.</p>
           </div>
         </div>
         <button
@@ -245,9 +252,9 @@ export default function RolesPermissionsSettings() {
 
       <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-200px)]">
         {/* Sidebar: Role List */}
-        <div className="w-full lg:w-1/4 bg-white dark:bg-gray-800 dark:bg-gray-800 shadow rounded-lg overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
-            <h3 className="font-medium text-gray-900 dark:text-white dark:text-white">Roles</h3>
+        <div className="w-full lg:w-1/4 bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700">
+            <h3 className="font-medium text-gray-900 dark:text-white">Roles</h3>
             <button onClick={handleAddRole} className="text-primary hover:text-pink-800">
               <Plus className="h-5 w-5" />
             </button>
@@ -258,16 +265,16 @@ export default function RolesPermissionsSettings() {
                 <li 
                   key={role.id}
                   onClick={() => setSelectedRoleId(role.id)}
-                  className={`cursor-pointer hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 transition-colors ${selectedRoleId === role.id ? 'bg-secondary border-l-4 border-primary' : 'border-l-4 border-transparent'}`}
+                  className={`cursor-pointer hover:bg-gray-50 dark:bg-gray-700 transition-colors ${selectedRoleId === role.id ? 'bg-secondary border-l-4 border-primary' : 'border-l-4 border-transparent'}`}
                 >
                   <div className="px-4 py-4 flex items-center justify-between">
                     <div className="flex items-center">
                       <Shield className={`h-4 w-4 mr-3 ${selectedRoleId === role.id ? 'text-primary' : 'text-gray-400'}`} />
                       <div>
-                        <p className={`text-sm font-medium ${selectedRoleId === role.id ? 'text-pink-900' : 'text-gray-900 dark:text-white dark:text-white'}`}>
+                        <p className={`text-sm font-medium ${selectedRoleId === role.id ? 'text-pink-900' : 'text-gray-900 dark:text-white'}`}>
                           {role.name}
                         </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 truncate max-w-[150px]">{role.description}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]">{role.description}</p>
                       </div>
                     </div>
                     {!role.isSystem && (
@@ -287,8 +294,8 @@ export default function RolesPermissionsSettings() {
 
         {/* Main Content: Permissions Matrix */}
         {selectedRole && (
-        <div className="flex-1 bg-white dark:bg-gray-800 dark:bg-gray-800 shadow rounded-lg overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+        <div className="flex-1 bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden flex flex-col">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
             <div className="flex justify-between items-start">
               <div className="flex-1">
                 {isEditingName ? (
@@ -309,11 +316,11 @@ export default function RolesPermissionsSettings() {
                   </div>
                 ) : (
                   <div onClick={() => !selectedRole.isSystem && setIsEditingName(true)} className={!selectedRole.isSystem ? 'cursor-pointer group' : ''}>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white dark:text-white flex items-center">
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center">
                       {selectedRole.name}
                       {selectedRole.isSystem && <Lock className="h-4 w-4 ml-2 text-gray-400" />}
                     </h3>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">{selectedRole.description}</p>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{selectedRole.description}</p>
                   </div>
                 )}
               </div>
@@ -328,22 +335,22 @@ export default function RolesPermissionsSettings() {
 
           <div className="flex-1 overflow-y-auto p-6">
             {/* Module Permissions */}
-            <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white uppercase tracking-wider mb-4">Module Access</h4>
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white uppercase tracking-wider mb-4">Module Access</h4>
             <div className="border rounded-lg overflow-hidden mb-8">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Module</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Create</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Read</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Update</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Delete</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Module</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Create</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Read</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Update</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Delete</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 dark:bg-gray-800 divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200">
                   {Object.entries(selectedRole.permissions).map(([module, perms]) => (
                     <tr key={module}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white dark:text-white capitalize">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white capitalize">
                         {module}
                       </td>
                       {(['create', 'read', 'update', 'delete'] as PermissionType[]).map((type) => (
@@ -364,9 +371,9 @@ export default function RolesPermissionsSettings() {
             </div>
 
             {/* Field Level Security */}
-            <h4 className="text-sm font-medium text-gray-900 dark:text-white dark:text-white uppercase tracking-wider mb-4">Field Level Security & Actions</h4>
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white uppercase tracking-wider mb-4">Field Level Security & Actions</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-start p-4 border rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+              <div className="flex items-start p-4 border rounded-lg hover:bg-gray-50 dark:bg-gray-700">
                 <div className="flex items-center h-5">
                   <input
                     id="viewFinancialTotals"
@@ -379,11 +386,11 @@ export default function RolesPermissionsSettings() {
                 </div>
                 <div className="ml-3 text-sm">
                   <label htmlFor="viewFinancialTotals" className="font-medium text-gray-700">View Financial Totals</label>
-                  <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">Can see total revenue, budget, and cost figures.</p>
+                  <p className="text-gray-500 dark:text-gray-400">Can see total revenue, budget, and cost figures.</p>
                 </div>
               </div>
 
-              <div className="flex items-start p-4 border rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+              <div className="flex items-start p-4 border rounded-lg hover:bg-gray-50 dark:bg-gray-700">
                 <div className="flex items-center h-5">
                   <input
                     id="viewClientContactInfo"
@@ -396,11 +403,11 @@ export default function RolesPermissionsSettings() {
                 </div>
                 <div className="ml-3 text-sm">
                   <label htmlFor="viewClientContactInfo" className="font-medium text-gray-700">View Client Contact Info</label>
-                  <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">Can see phone numbers and email addresses.</p>
+                  <p className="text-gray-500 dark:text-gray-400">Can see phone numbers and email addresses.</p>
                 </div>
               </div>
 
-              <div className="flex items-start p-4 border rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+              <div className="flex items-start p-4 border rounded-lg hover:bg-gray-50 dark:bg-gray-700">
                 <div className="flex items-center h-5">
                   <input
                     id="exportData"
@@ -413,11 +420,11 @@ export default function RolesPermissionsSettings() {
                 </div>
                 <div className="ml-3 text-sm">
                   <label htmlFor="exportData" className="font-medium text-gray-700">Export Data</label>
-                  <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">Can download CSV/Excel reports.</p>
+                  <p className="text-gray-500 dark:text-gray-400">Can download CSV/Excel reports.</p>
                 </div>
               </div>
 
-              <div className="flex items-start p-4 border rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+              <div className="flex items-start p-4 border rounded-lg hover:bg-gray-50 dark:bg-gray-700">
                 <div className="flex items-center h-5">
                   <input
                     id="approveContracts"
@@ -430,7 +437,7 @@ export default function RolesPermissionsSettings() {
                 </div>
                 <div className="ml-3 text-sm">
                   <label htmlFor="approveContracts" className="font-medium text-gray-700">Approve Contracts</label>
-                  <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">Can countersign contracts on behalf of the company.</p>
+                  <p className="text-gray-500 dark:text-gray-400">Can countersign contracts on behalf of the company.</p>
                 </div>
               </div>
             </div>

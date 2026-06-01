@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { 
   User, Calendar, MapPin, Briefcase, Phone, FileText, 
   Save, Plus, X
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { eventService } from '../../services/eventService';
 import { clientService } from '../../services/clientService';
@@ -12,6 +13,7 @@ import { venueService } from '../../services/venueService';
 import { plannerService } from '../../services/plannerService';
 import type { Event } from '../../types/event';
 import type { Client } from '../../types/client';
+import type { CreateLeadDTO } from '../../types/lead';
 
 type Tab = 'client' | 'event' | 'venue' | 'planner' | 'dayof' | 'additional';
 
@@ -81,13 +83,7 @@ export default function BookingQuestionnaire({ embedded = false, eventId: propEv
 
   const { register, handleSubmit, reset } = useForm<BookingFormData>();
 
-  useEffect(() => {
-    if (eventId) {
-      loadData(eventId);
-    }
-  }, [eventId]);
-
-  const loadData = async (id: string) => {
+  const loadData = useCallback(async (id: string) => {
     setLoading(true);
     try {
       const eventData = await eventService.getEvent(id);
@@ -157,7 +153,13 @@ export default function BookingQuestionnaire({ embedded = false, eventId: propEv
     } finally {
       setLoading(false);
     }
-  };
+  }, [reset]);
+
+  useEffect(() => {
+    if (eventId) {
+      loadData(eventId);
+    }
+  }, [eventId, loadData]);
 
   const onSubmit = async (data: BookingFormData) => {
     if (!event || !client) return;
@@ -212,6 +214,10 @@ export default function BookingQuestionnaire({ embedded = false, eventId: propEv
     }
   };
 
+  const leadRoles: CreateLeadDTO['role'][] = ['Bride', 'Groom', 'Parent', 'External Planner', 'Hotel/Resort', 'Private Venue'];
+  const toLeadRole = (value: string): CreateLeadDTO['role'] =>
+    leadRoles.find((item) => item === value);
+
   const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault();
     setNewClientLoading(true);
@@ -221,7 +227,7 @@ export default function BookingQuestionnaire({ embedded = false, eventId: propEv
         last_name: newClientData.last_name,
         email: newClientData.email,
         phone: newClientData.phone,
-        role: newClientData.role as any,
+        role: toLeadRole(newClientData.role),
         relationship: newClientData.relationship,
         // Default values
         lead_source: 'Other',
@@ -255,7 +261,7 @@ export default function BookingQuestionnaire({ embedded = false, eventId: propEv
     }
   };
 
-  const tabs: { id: Tab; label: string; icon: any }[] = [
+  const tabs: { id: Tab; label: string; icon: LucideIcon }[] = [
     { id: 'client', label: 'Client Details', icon: User },
     { id: 'event', label: 'Event Details', icon: Calendar },
     { id: 'venue', label: 'Venue Details', icon: MapPin },
@@ -268,13 +274,13 @@ export default function BookingQuestionnaire({ embedded = false, eventId: propEv
     <div className={embedded ? "" : "max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8"}>
       {!embedded && (
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white dark:text-white">New Booking Questionnaire</h1>
-          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Please fill out all the details for the upcoming event.</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">New Booking Questionnaire</h1>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Please fill out all the details for the upcoming event.</p>
         </div>
       )}
 
-      <div className={embedded ? "" : "bg-white dark:bg-gray-800 dark:bg-gray-800 shadow rounded-lg overflow-hidden"}>
-        <div className="flex border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 overflow-x-auto">
+      <div className={embedded ? "" : "bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden"}>
+        <div className="flex border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -285,7 +291,7 @@ export default function BookingQuestionnaire({ embedded = false, eventId: propEv
                   flex-1 min-w-[120px] py-4 px-4 text-sm font-medium text-center border-b-2 focus:outline-none flex flex-col items-center justify-center gap-2
                   ${activeTab === tab.id
                     ? 'border-primary text-primary bg-secondary'
-                    : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
                   }
                 `}
               >
@@ -454,7 +460,7 @@ export default function BookingQuestionnaire({ embedded = false, eventId: propEv
             <div className="space-y-6">
               <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-4">If different from Lead Planner</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">If different from Lead Planner</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Day-of Contact Name</label>
@@ -478,11 +484,11 @@ export default function BookingQuestionnaire({ embedded = false, eventId: propEv
             </div>
           )}
 
-          <div className="mt-8 pt-5 border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 flex justify-between">
+          <div className="mt-8 pt-5 border-t border-gray-200 dark:border-gray-700 flex justify-between">
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="bg-white dark:bg-gray-800 dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+              className="bg-white dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
             >
               Cancel
             </button>
@@ -500,20 +506,20 @@ export default function BookingQuestionnaire({ embedded = false, eventId: propEv
 
       {/* Add Client Modal */}
       {showAddClientModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-50 dark:bg-gray-700 dark:bg-gray-7000 bg-opacity-75 p-4">
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700 flex justify-between items-center">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Add Additional Client</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-50 dark:bg-gray-7000 bg-opacity-75 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Add Additional Client</h3>
               <button
                 onClick={() => setShowAddClientModal(false)}
-                className="text-gray-400 hover:text-gray-500 dark:text-gray-400 dark:text-gray-400"
+                className="text-gray-400 hover:text-gray-500 dark:text-gray-400"
               >
                 <X className="h-6 w-6" />
               </button>
             </div>
             
             <div className="p-6">
-              <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-6">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
                 Add details for an additional client (e.g. Partner, Parent).
               </p>
               
@@ -594,7 +600,7 @@ export default function BookingQuestionnaire({ embedded = false, eventId: propEv
                 <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-100">
                   <button
                     type="button"
-                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                     onClick={() => setShowAddClientModal(false)}
                   >
                     Cancel

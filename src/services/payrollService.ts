@@ -3,8 +3,34 @@ import type { PayrollRun, EventStaffAssignment } from '../types/staff';
 import { staffService } from './staffService';
 import { startOfWeek, endOfWeek, addDays, format } from 'date-fns';
 
+type AssignmentRow = {
+  id: string;
+  event_id: string;
+  staff_id: string;
+  role: string;
+  status: EventStaffAssignment['status'];
+  start_time?: string | null;
+  end_time?: string | null;
+  hours_worked?: number | null;
+  pay_rate?: number | null;
+  pay_type: EventStaffAssignment['pay_type'];
+  total_pay?: number | null;
+  pay_rate_id?: string | null;
+  compensation_config?: EventStaffAssignment['compensation_config'];
+  is_paid: boolean;
+  paid_at?: string | null;
+  payment_reference?: string | null;
+  payment_method?: string | null;
+  from_account?: string | null;
+  to_account?: string | null;
+  event?: { name: string; date: string; venue_name?: string | null };
+  events?: { name: string; date: string; venue_name?: string | null };
+  staff?: { first_name?: string; last_name?: string };
+  staff_profiles?: { first_name?: string; last_name?: string };
+};
+
 const normalizeAssignment = (
-  row: any,
+  row: AssignmentRow,
   staffOverride?: { first_name?: string; last_name?: string }
 ): EventStaffAssignment => ({
   id: row.id,
@@ -12,22 +38,38 @@ const normalizeAssignment = (
   staff_id: row.staff_id,
   role: row.role,
   status: row.status,
-  start_time: row.start_time,
-  end_time: row.end_time,
-  hours_worked: row.hours_worked,
-  pay_rate: row.pay_rate,
+  start_time: row.start_time || undefined,
+  end_time: row.end_time || undefined,
+  hours_worked: row.hours_worked ?? undefined,
+  pay_rate: row.pay_rate ?? undefined,
   pay_type: row.pay_type,
-  total_pay: row.total_pay,
+  total_pay: row.total_pay ?? undefined,
   pay_rate_id: row.pay_rate_id,
   compensation_config: row.compensation_config,
   is_paid: row.is_paid,
-  paid_at: row.paid_at,
-  payment_reference: row.payment_reference,
-  payment_method: row.payment_method,
-  from_account: row.from_account,
-  to_account: row.to_account,
-  event: row.event || row.events || undefined,
-  staff: staffOverride || row.staff || row.staff_profiles || undefined
+  paid_at: row.paid_at || undefined,
+  payment_reference: row.payment_reference || undefined,
+  payment_method: row.payment_method || undefined,
+  from_account: row.from_account || undefined,
+  to_account: row.to_account || undefined,
+  event: (() => {
+    const event = row.event || row.events;
+    if (!event) return undefined;
+    return {
+      ...event,
+      venue_name: event.venue_name ?? undefined,
+    };
+  })(),
+  staff:
+    (staffOverride?.first_name && staffOverride?.last_name
+      ? { first_name: staffOverride.first_name, last_name: staffOverride.last_name }
+      : undefined) ||
+    (row.staff?.first_name && row.staff?.last_name
+      ? { first_name: row.staff.first_name, last_name: row.staff.last_name }
+      : undefined) ||
+    (row.staff_profiles?.first_name && row.staff_profiles?.last_name
+      ? { first_name: row.staff_profiles.first_name, last_name: row.staff_profiles.last_name }
+      : undefined)
 });
 
 export const payrollService = {
@@ -73,8 +115,8 @@ export const payrollService = {
       last_name: member.last_name
     }]));
 
-    const normalizedItems = (items || []).map((row: any) =>
-      normalizeAssignment(row, staffMap.get(row.staff_id))
+    const normalizedItems = (items || []).map((row) =>
+      normalizeAssignment(row as AssignmentRow, staffMap.get(row.staff_id))
     );
 
     return { ...run, items: normalizedItems };
@@ -109,7 +151,7 @@ export const payrollService = {
     if (fetchError) throw fetchError;
 
     const eligibleAssignments = (assignmentRows || [])
-      .map((row: any) => normalizeAssignment(row))
+      .map((row) => normalizeAssignment(row as AssignmentRow))
       .filter((assignment) => {
         const eventDate = assignment.event?.date;
         if (!eventDate) return false;

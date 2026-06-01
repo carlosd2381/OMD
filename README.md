@@ -75,6 +75,15 @@ A comprehensive business management application for dessert catering businesses,
 - **Products & Services**
 - **Financials:** Multi-currency support (MXN primary)
 
+## Database Migrations
+
+Apply Supabase migrations before using new modules and schema-dependent features.
+
+- Financials Phase 1 requires:
+  - `supabase/migrations/20260326000100_add_financial_module_phase1.sql`
+
+If this migration is not applied yet, the Financials dashboard can load with limited fallback behavior, but transaction logging and invoice payment aggregation from `financial_transactions` will be unavailable.
+
 ## License
 
 Private

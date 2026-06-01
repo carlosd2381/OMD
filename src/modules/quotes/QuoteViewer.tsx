@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Edit, Loader2 } from 'lucide-react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { ArrowLeft, Download, Edit, ExternalLink, Loader2 } from 'lucide-react';
 import { quoteService } from '../../services/quoteService';
 import { clientService } from '../../services/clientService';
 import { eventService } from '../../services/eventService';
 import { settingsService, type BrandingSettings } from '../../services/settingsService';
+import { activityLogService, type DocumentNotificationStatus } from '../../services/activityLogService';
+import { NotificationStatus } from '../../components/NotificationStatus';
 import { formatCurrency, formatDocumentID, parseDateInput } from '../../utils/formatters';
 import { currencyService } from '../../services/currencyService';
+import { parseQuoteSourceContext, resolveQuoteSourceInvoiceLabel } from '../../utils/quoteNavigation';
 import type { Quote } from '../../types/quote';
 import type { Client } from '../../types/client';
 import type { Event } from '../../types/event';
@@ -15,12 +18,36 @@ import toast from 'react-hot-toast';
 export default function QuoteViewer() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
   const [branding, setBranding] = useState<BrandingSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [notificationStatus, setNotificationStatus] = useState<DocumentNotificationStatus | null>(null);
+  const [sourceInvoiceLabel, setSourceInvoiceLabel] = useState<string | null>(null);
+  const { isLegacyInvoiceSource: showLegacyInvoiceContext, sourceInvoiceId } = parseQuoteSourceContext(location.search);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadSourceInvoiceLabel = async () => {
+      if (!sourceInvoiceId) {
+        setSourceInvoiceLabel(null);
+        return;
+      }
+
+      const label = await resolveQuoteSourceInvoiceLabel(sourceInvoiceId, event?.date);
+      if (active) setSourceInvoiceLabel(label);
+    };
+
+    loadSourceInvoiceLabel();
+
+    return () => {
+      active = false;
+    };
+  }, [event?.date, sourceInvoiceId]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -39,6 +66,11 @@ export default function QuoteViewer() {
           ]);
           setClient(clientData);
           setEvent(eventData);
+
+          if (clientData?.id && quoteData.id) {
+            const statusData = await activityLogService.getLatestDocumentNotificationStatus(clientData.id, 'quote', quoteData.id);
+            setNotificationStatus(statusData);
+          }
         }
 
         setBranding(brandingData);
@@ -67,6 +99,15 @@ export default function QuoteViewer() {
 
   const formatBaseCurrency = (amount: number) => formatCurrency(amount, 'MXN');
   const formatConvertedCurrency = (amount: number) => formatCurrency(amount / safeRate, quote.currency);
+  const handleBack = () => {
+    if (showLegacyInvoiceContext && sourceInvoiceId) {
+      navigate(`/invoices/${sourceInvoiceId}`);
+      return;
+    }
+
+    navigate(-1);
+  };
+
   const MoneyDisplay = ({ amount, align = 'right' }: { amount: number; align?: 'left' | 'right' }) => (
     <div className={`flex flex-col ${align === 'right' ? 'items-end text-right' : ''}`}>
       <span>{formatBaseCurrency(amount)}</span>
@@ -140,7 +181,7 @@ export default function QuoteViewer() {
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <button
-          onClick={() => navigate(-1)}
+          onClick={handleBack}
           className="inline-flex items-center text-gray-500 dark:text-gray-400 hover:text-gray-700"
         >
           <ArrowLeft className="h-5 w-5 mr-2" />
@@ -167,15 +208,40 @@ export default function QuoteViewer() {
           </button>
         </div>
       </div>
+
+      {showLegacyInvoiceContext && (
+        <div className="mb-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p>You opened this quote from a legacy invoice. This is the active revision for the event.</p>
+          {sourceInvoiceId && (
+            <button
+              onClick={handleBack}
+              title="Return to invoice"
+              aria-label="Return to invoice"
+              className="mt-1 inline-flex items-center gap-1 text-xs text-amber-800 underline underline-offset-2 hover:text-amber-900"
+            >
+              Source: {sourceInvoiceLabel || sourceInvoiceId}
+              <ExternalLink className="h-3 w-3" />
+            </button>
+          )}
+          {sourceInvoiceId && (
+            <button
+              onClick={handleBack}
+              className="mt-3 inline-flex items-center rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+            >
+              Return to invoice
+            </button>
+          )}
+        </div>
+      )}
       
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow-lg sm:rounded-lg overflow-hidden p-10 min-h-[800px]">
+      <div className="bg-white dark:bg-gray-800 shadow-lg sm:rounded-lg overflow-hidden p-10 min-h-[800px]">
         {/* Header */}
         <div className="flex justify-between items-start mb-12">
           <div>
-            <h2 className="text-3xl font-serif text-gray-900 dark:text-white dark:text-white uppercase tracking-widest mb-2">Price Quote</h2>
+            <h2 className="text-3xl font-serif text-gray-900 dark:text-white uppercase tracking-widest mb-2">Price Quote</h2>
             <div className="text-xs font-bold uppercase mb-1">{branding?.company_name || 'Oh My Desserts MX'}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{branding?.address || 'Priv. Palmilla, Jardines del Sur II, Benito Juarez, Quintana Roo, 77535'}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{branding?.website || 'www.ohmydessertsmx.com'} | {branding?.email || 'info@ohmydessertsmx.com'}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">{branding?.address || 'Priv. Palmilla, Jardines del Sur II, Benito Juarez, Quintana Roo, 77535'}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">{branding?.website || 'www.ohmydessertsmx.com'} | {branding?.email || 'info@ohmydessertsmx.com'}</div>
           </div>
           <div className="w-20 h-20 rounded-full bg-[#f5f0eb] flex items-center justify-center overflow-hidden">
             {branding?.logo_url ? (
@@ -189,25 +255,25 @@ export default function QuoteViewer() {
         {/* Info Section */}
         <div className="flex justify-between mb-12">
           <div className="w-1/2">
-            <h4 className="text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase mb-2">Prepared For</h4>
-            <div className="text-xs text-gray-900 dark:text-white dark:text-white">
+            <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase mb-2">Prepared For</h4>
+            <div className="text-xs text-gray-900 dark:text-white">
               <p className="mb-1 font-bold">{client?.first_name} {client?.last_name}</p>
-              <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">{client?.email}</p>
-              <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">{client?.phone}</p>
-              {client?.address && <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">{client.address}</p>}
+              <p className="text-gray-500 dark:text-gray-400 mb-1">{client?.email}</p>
+              <p className="text-gray-500 dark:text-gray-400 mb-1">{client?.phone}</p>
+              {client?.address && <p className="text-gray-500 dark:text-gray-400">{client.address}</p>}
               {(client?.city || client?.state) && (
-                <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                <p className="text-gray-500 dark:text-gray-400">
                   {[client.city, client.state, client.zip_code].filter(Boolean).join(', ')}
                 </p>
               )}
             </div>
             {event && (
                <div className="mt-4">
-                 <h4 className="text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase mb-2">Event Details</h4>
-                 <div className="text-xs text-gray-900 dark:text-white dark:text-white">
+                 <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase mb-2">Event Details</h4>
+                 <div className="text-xs text-gray-900 dark:text-white">
                    <p className="mb-1">{event.name}</p>
                    {eventDateDisplay && (
-                     <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">{eventDateDisplay}</p>
+                     <p className="text-gray-500 dark:text-gray-400">{eventDateDisplay}</p>
                    )}
                  </div>
                </div>
@@ -215,28 +281,32 @@ export default function QuoteViewer() {
           </div>
           <div className="w-1/2 pl-10">
             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Quote #:</span>
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Quote #:</span>
               <span className="text-xs text-right font-mono">{quoteNumber}</span>
             </div>
             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Date:</span>
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Date:</span>
               <span className="text-xs text-right">{quoteDateDisplay}</span>
             </div>
             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Valid Until:</span>
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Valid Until:</span>
               <span className="text-xs text-right">{validUntilDisplay}</span>
             </div>
             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Status:</span>
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Status:</span>
               <span className={`text-xs text-right font-bold ${
                 quote.status === 'accepted' ? 'text-green-600' : 
                 quote.status === 'rejected' ? 'text-red-600' : 
                 'text-blue-600'
               }`}>{quote.status.toUpperCase()}</span>
             </div>
+            <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Notification:</span>
+              <NotificationStatus status={notificationStatus} showDate />
+            </div>
             {showConvertedValues && (
               <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Exchange Rate:</span>
+                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Exchange Rate:</span>
                 <span className="text-xs text-right">1 {quote.currency} ≈ {formatBaseCurrency(safeRate)}</span>
               </div>
             )}
@@ -246,23 +316,23 @@ export default function QuoteViewer() {
         {/* Table */}
         <div className="mb-8">
           <div className="flex bg-[#f5f0eb] py-2 px-2 mb-2">
-            <div className="w-7/12 text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase">Description</div>
-            <div className="w-2/12 text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase text-right">Qty</div>
-            <div className="w-3/12 text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase text-right">Total</div>
+            <div className="w-7/12 text-xs font-bold text-gray-900 dark:text-white uppercase">Description</div>
+            <div className="w-2/12 text-xs font-bold text-gray-900 dark:text-white uppercase text-right">Qty</div>
+            <div className="w-3/12 text-xs font-bold text-gray-900 dark:text-white uppercase text-right">Total</div>
           </div>
           
           {quote.items && quote.items.length > 0 ? (
             quote.items.map((item, index) => (
               <div key={index} className="flex border-b border-gray-100 py-2 px-2">
-                <div className="w-7/12 text-xs text-gray-900 dark:text-white dark:text-white">{item.description}</div>
-                <div className="w-2/12 text-xs text-gray-900 dark:text-white dark:text-white text-right">{item.quantity}</div>
-                <div className="w-3/12 text-xs text-gray-900 dark:text-white dark:text-white text-right">
+                <div className="w-7/12 text-xs text-gray-900 dark:text-white">{item.description}</div>
+                <div className="w-2/12 text-xs text-gray-900 dark:text-white text-right">{item.quantity}</div>
+                <div className="w-3/12 text-xs text-gray-900 dark:text-white text-right">
                   <MoneyDisplay amount={item.total} />
                 </div>
               </div>
             ))
           ) : (
-            <div className="py-4 text-center text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">No items in this quote</div>
+            <div className="py-4 text-center text-xs text-gray-500 dark:text-gray-400">No items in this quote</div>
           )}
         </div>
 
@@ -270,19 +340,19 @@ export default function QuoteViewer() {
         <div className="flex justify-end mb-12">
           <div className="w-1/2 pl-10">
             <div className="flex justify-between py-1">
-              <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Subtotal</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Subtotal</span>
               <MoneyDisplay amount={subtotal} />
             </div>
             {quote.taxes && quote.taxes.length > 0 && quote.taxes.map((tax, index) => (
               <div className="flex justify-between py-1" key={`${tax.name}-${index}`}>
-                <span className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
                   {tax.name} {typeof tax.rate === 'number' ? `(${tax.rate}%)` : ''}
                 </span>
                 <MoneyDisplay amount={tax.is_retention ? -tax.amount : tax.amount} />
               </div>
             ))}
-            <div className="flex justify-between py-2 border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 mt-2">
-              <span className="text-sm font-bold text-gray-900 dark:text-white dark:text-white">Total</span>
+            <div className="flex justify-between py-2 border-t border-gray-200 dark:border-gray-700 mt-2">
+              <span className="text-sm font-bold text-gray-900 dark:text-white">Total</span>
               <MoneyDisplay amount={totalBase} />
             </div>
           </div>
@@ -290,7 +360,7 @@ export default function QuoteViewer() {
 
         {/* Footer */}
         <div className="text-center border-t border-gray-100 pt-8">
-          <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">This quote is valid until {new Date(quote.valid_until).toLocaleDateString()}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">This quote is valid until {new Date(quote.valid_until).toLocaleDateString()}</p>
           <p className="text-[10px] text-gray-400">
             {branding?.company_name || 'Oh My Desserts MX'}
           </p>

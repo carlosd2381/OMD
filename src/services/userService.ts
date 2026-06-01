@@ -11,7 +11,7 @@ export interface User {
   role: UserRole[];
   status: UserStatus;
   lastLogin: string;
-  securityConfig?: any;
+  securityConfig?: unknown;
 }
 
 export interface Session {
@@ -117,7 +117,7 @@ export const userService = {
   updateUser: async (id: string, updates: { name?: string; role?: UserRole[]; status?: UserStatus }): Promise<void> => {
     const { error } = await supabase
       .from('users')
-      .update(updates as any)
+      .update(updates as Database['public']['Tables']['users']['Update'])
       .eq('id', id);
 
     if (error) throw error;
@@ -130,7 +130,6 @@ export const userService = {
       .order('last_active', { ascending: false });
 
     if (error) throw error;
-    // @ts-ignore
     return (data || []).map(mapToSession);
   },
 

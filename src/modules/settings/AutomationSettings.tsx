@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Zap, 
   Plus, 
@@ -56,11 +56,7 @@ export default function AutomationSettings() {
   const [isEditing, setIsEditing] = useState(false);
   const [currentWorkflow, setCurrentWorkflow] = useState<Workflow | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [workflowsData, logsData, productsData] = await Promise.all([
         automationService.getWorkflows(),
@@ -74,7 +70,15 @@ export default function AutomationSettings() {
       console.error('Error loading automation data:', error);
       toast.error('Failed to load automation data');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loadData]);
 
   // Editor State
   const handleCreateNew = () => {
@@ -184,7 +188,11 @@ export default function AutomationSettings() {
     });
   };
 
-  const updateActionConfig = (actionId: string, key: string, value: any) => {
+  const updateActionConfig = (
+    actionId: string,
+    key: string,
+    value: WorkflowAction['config'][string]
+  ) => {
     if (!currentWorkflow) return;
     setCurrentWorkflow({
       ...currentWorkflow,
@@ -201,7 +209,7 @@ export default function AutomationSettings() {
         return (
           <div className="grid grid-cols-2 gap-4 mt-2">
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Template</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Template</label>
               <select 
                 className="mt-1 block w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
                 value={action.config.templateId || ''}
@@ -214,7 +222,7 @@ export default function AutomationSettings() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Recipient</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Recipient</label>
               <select 
                 className="mt-1 block w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
                 value={action.config.to || ''}
@@ -232,7 +240,7 @@ export default function AutomationSettings() {
         return (
           <div className="grid grid-cols-2 gap-4 mt-2">
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Task Title</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Task Title</label>
               <input 
                 type="text"
                 className="mt-1 block w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
@@ -242,7 +250,7 @@ export default function AutomationSettings() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Due In (Days)</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Due In (Days)</label>
               <input 
                 type="number"
                 className="mt-1 block w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
@@ -285,7 +293,7 @@ export default function AutomationSettings() {
       case 'webhook':
         return (
           <div className="mt-2">
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Webhook URL</label>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Webhook URL</label>
             <input 
               type="text"
               className="mt-1 block w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
@@ -311,7 +319,7 @@ export default function AutomationSettings() {
             >
               <ArrowRight className="h-6 w-6 transform rotate-180" />
             </button>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
               {currentWorkflow.id && !currentWorkflow.id.startsWith('temp_') ? 'Edit Workflow' : 'New Workflow'}
             </h2>
           </div>
@@ -319,14 +327,14 @@ export default function AutomationSettings() {
             {currentWorkflow.id && !currentWorkflow.id.startsWith('temp_') && (
               <button
                 onClick={() => handleDelete(currentWorkflow.id)}
-                className="px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-red-50"
+                className="px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white dark:bg-gray-800 hover:bg-red-50"
               >
                 Delete
               </button>
             )}
             <button
               onClick={() => setIsEditing(false)}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700"
             >
               Cancel
             </button>
@@ -340,7 +348,7 @@ export default function AutomationSettings() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow rounded-lg p-6 space-y-6">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 space-y-6">
           {/* Basic Info */}
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
@@ -361,19 +369,19 @@ export default function AutomationSettings() {
                 onChange={(e) => setCurrentWorkflow({...currentWorkflow, active: e.target.checked})}
                 className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
               />
-              <label htmlFor="active-toggle" className="ml-2 block text-sm text-gray-900 dark:text-white dark:text-white">
+              <label htmlFor="active-toggle" className="ml-2 block text-sm text-gray-900 dark:text-white">
                 Workflow is Active
               </label>
             </div>
           </div>
 
           {/* Trigger Section */}
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white flex items-center mb-4">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center mb-4">
               <Zap className="h-5 w-5 text-yellow-500 mr-2" />
               When this happens...
             </h3>
-            <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 rounded-md border border-gray-200 dark:border-gray-700 dark:border-gray-700">
+            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-md border border-gray-200 dark:border-gray-700">
               <label className="block text-sm font-medium text-gray-700 mb-1">Trigger Event</label>
               <select
                 value={currentWorkflow.trigger}
@@ -425,7 +433,7 @@ export default function AutomationSettings() {
                     </select>
                     <select
                       value={condition.operator}
-                      onChange={(e) => updateCondition(index, { operator: e.target.value as any })}
+                      onChange={(e) => updateCondition(index, { operator: e.target.value as WorkflowCondition['operator'] })}
                       className="block w-32 text-sm border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
                     >
                       {OPERATORS.map(op => (
@@ -452,8 +460,8 @@ export default function AutomationSettings() {
           </div>
 
           {/* Actions Section */}
-          <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white flex items-center mb-4">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center mb-4">
               <Play className="h-5 w-5 text-green-500 mr-2" />
               Do this...
             </h3>
@@ -464,15 +472,15 @@ export default function AutomationSettings() {
                   <div className="flex items-center h-full absolute left-0 top-0 bottom-0 ml-4">
                     <div className="h-full w-0.5 bg-gray-200"></div>
                   </div>
-                  <div className="relative z-10 shrink-0 h-8 w-8 rounded-full bg-white dark:bg-gray-800 dark:bg-gray-800 border-2 border-gray-300 flex items-center justify-center text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                  <div className="relative z-10 shrink-0 h-8 w-8 rounded-full bg-white dark:bg-gray-800 border-2 border-gray-300 flex items-center justify-center text-sm font-medium text-gray-500 dark:text-gray-400">
                     {index + 1}
                   </div>
-                  <div className="ml-4 flex-1 bg-white dark:bg-gray-800 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 dark:border-gray-700 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="ml-4 flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start">
                       <div className="w-full max-w-xs">
                         <select
                           value={action.type}
-                          onChange={(e) => updateAction(action.id, { type: e.target.value as any })}
+                          onChange={(e) => updateAction(action.id, { type: e.target.value as WorkflowAction['type'] })}
                           className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm font-medium"
                         >
                           {ACTION_TYPES.map(t => (
@@ -489,7 +497,7 @@ export default function AutomationSettings() {
                     </div>
                     
                     {/* Dynamic Config Fields */}
-                    <div className="mt-3 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-3 rounded border border-gray-100">
+                    <div className="mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded border border-gray-100">
                       {renderActionConfig(action)}
                     </div>
                   </div>
@@ -503,7 +511,7 @@ export default function AutomationSettings() {
                 <div className="ml-4">
                   <button
                     onClick={addAction}
-                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none"
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none"
                   >
                     Add Action
                   </button>
@@ -520,8 +528,8 @@ export default function AutomationSettings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Automations</h2>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Manage workflows and view execution logs.</p>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Automations</h2>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage workflows and view execution logs.</p>
         </div>
         {activeTab === 'workflows' && (
           <button 
@@ -535,14 +543,14 @@ export default function AutomationSettings() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+      <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
           <button
             onClick={() => setActiveTab('workflows')}
             className={`${
               activeTab === 'workflows'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm`}
           >
             <Zap className={`${activeTab === 'workflows' ? 'text-primary' : 'text-gray-400'} -ml-0.5 mr-2 h-5 w-5`} />
@@ -553,7 +561,7 @@ export default function AutomationSettings() {
             className={`${
               activeTab === 'logs'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm`}
           >
             <Activity className={`${activeTab === 'logs' ? 'text-primary' : 'text-gray-400'} -ml-0.5 mr-2 h-5 w-5`} />
@@ -568,7 +576,7 @@ export default function AutomationSettings() {
           {workflows.map((workflow) => (
             <div 
               key={workflow.id}
-              className="bg-white dark:bg-gray-800 dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-200 dark:border-gray-700 dark:border-gray-700 hover:shadow-md transition-shadow cursor-pointer"
+              className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow cursor-pointer"
               onClick={() => handleEdit(workflow)}
             >
               <div className="p-5">
@@ -578,21 +586,21 @@ export default function AutomationSettings() {
                       <Zap className={`h-6 w-6 ${workflow.active ? 'text-green-600' : 'text-gray-400'}`} />
                     </div>
                     <div className="ml-4">
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">{workflow.name}</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white">{workflow.name}</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         {TRIGGERS.find(t => t.value === workflow.trigger)?.label || workflow.trigger}
                       </p>
                     </div>
                   </div>
                 </div>
                 <div className="mt-4">
-                  <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                  <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                     <Play className="shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
                     {workflow.actions.length} Actions configured
                   </div>
                 </div>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 px-5 py-3">
+              <div className="bg-gray-50 dark:bg-gray-700 px-5 py-3">
                 <div className="text-sm">
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                     workflow.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
@@ -605,7 +613,7 @@ export default function AutomationSettings() {
           ))}
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
           <ul className="divide-y divide-gray-200">
             {logs.map((log) => (
               <li key={log.id}>
@@ -629,12 +637,12 @@ export default function AutomationSettings() {
                   </div>
                   <div className="mt-2 sm:flex sm:justify-between">
                     <div className="sm:flex">
-                      <p className="flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                      <p className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                         <Settings className="shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
                         {log.details}
                       </p>
                     </div>
-                    <div className="mt-2 flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:mt-0">
+                    <div className="mt-2 flex items-center text-sm text-gray-500 dark:text-gray-400 sm:mt-0">
                       <Clock className="shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
                       <p>{log.triggeredAt}</p>
                     </div>

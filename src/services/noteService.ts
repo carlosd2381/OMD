@@ -22,7 +22,7 @@ export const noteService = {
       .from('notes')
       .select('*')
       .eq('entity_id', entityId)
-      .eq('entity_type', entityType as any)
+      .eq('entity_type', entityType as NoteRow['entity_type'])
       .order('created_at', { ascending: false });
 
     if (error) throw error;

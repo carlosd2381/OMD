@@ -3,9 +3,9 @@ import type { StaffPayRateRule } from '../types/staff';
 import type { Json } from '../types/supabase';
 import { DEFAULT_STAFF_PAY_RULES } from '../constants/staffPayRules';
 
-const toConfigObject = (config: Json): Record<string, any> => {
+const toConfigObject = (config: Json): Record<string, unknown> => {
   if (config && typeof config === 'object' && !Array.isArray(config)) {
-    return config as Record<string, any>;
+    return config as Record<string, unknown>;
   }
   return {};
 };

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { FileText, CheckSquare, PenTool, DollarSign, Star, Layout, Lock, Download, ClipboardList, CreditCard, CheckCircle, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { portalService } from '../../services/portalService';
 import { questionnaireService } from '../../services/questionnaireService';
 import { clientService } from '../../services/clientService';
@@ -32,6 +33,7 @@ import toast from 'react-hot-toast';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { userService } from '../../services/userService';
+import { activityLogService } from '../../services/activityLogService';
 
 type PortalTab = 'overview' | 'quotes' | 'questionnaires' | 'contracts' | 'invoices' | 'reviews';
 
@@ -58,9 +60,30 @@ export default function ClientPortal() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
 
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
+  const [quoteDetailContext, setQuoteDetailContext] = useState<'legacy-invoice-jump' | null>(null);
+  const [quoteContextInvoiceId, setQuoteContextInvoiceId] = useState<string | null>(null);
   const [selectedQuestionnaire, setSelectedQuestionnaire] = useState<Questionnaire | null>(null);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [showLegacyInvoices, setShowLegacyInvoices] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('omd:portal:showLegacyInvoices');
+      if (stored === 'true') setShowLegacyInvoices(true);
+    } catch {
+      // Ignore storage read issues
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('omd:portal:showLegacyInvoices', showLegacyInvoices ? 'true' : 'false');
+    } catch {
+      // Ignore storage write issues
+    }
+  }, [showLegacyInvoices]);
+
   const [nextStepPrompt, setNextStepPrompt] = useState<{
     title: string;
     message: string;
@@ -82,6 +105,28 @@ export default function ClientPortal() {
   const [isFillingQuestionnaire, setIsFillingQuestionnaire] = useState(false);
   const [contractFingerprint, setContractFingerprint] = useState('');
 
+  const clearQuoteContext = () => {
+    setQuoteDetailContext(null);
+    setQuoteContextInvoiceId(null);
+  };
+
+  const openQuoteDetail = (targetQuote: Quote) => {
+    clearQuoteContext();
+    setSelectedQuote(targetQuote);
+  };
+
+  const closeQuoteDetail = () => {
+    clearQuoteContext();
+    setSelectedQuote(null);
+  };
+
+  const openQuoteFromLegacyInvoice = (targetQuote: Quote, sourceInvoiceId: string) => {
+    setQuoteDetailContext('legacy-invoice-jump');
+    setQuoteContextInvoiceId(sourceInvoiceId);
+    setSelectedQuote(targetQuote);
+    setActiveTab('quotes');
+  };
+
   const handleProceedToNextStep = () => {
     if (!nextStepPrompt) return;
     const targetTab = nextStepPrompt.nextTab;
@@ -89,7 +134,7 @@ export default function ClientPortal() {
     setActiveTab(targetTab);
 
     if (targetTab === 'questionnaires') {
-      setSelectedQuote(null);
+      closeQuoteDetail();
     } else if (targetTab === 'contracts') {
       setSelectedQuestionnaire(null);
       setIsFillingQuestionnaire(false);
@@ -124,10 +169,105 @@ export default function ClientPortal() {
     return { safeRate, showConvertedValues, renderMoney };
   }, [selectedQuote]);
 
+  const questionnaireAnswerMap = useMemo(() => {
+    if (!selectedQuestionnaire?.answers || selectedQuestionnaire.answers.length === 0) {
+      return new Map<string, string>();
+    }
+
+    return new Map(
+      selectedQuestionnaire.answers
+        .filter((entry) => Boolean(entry.question_id))
+        .map((entry) => [entry.question_id, entry.answer ?? ''])
+    );
+  }, [selectedQuestionnaire]);
+
+  const getQuestionnaireFieldValue = (fieldName: string, fallbackValue = '') => {
+    const savedValue = questionnaireAnswerMap.get(fieldName);
+    if (typeof savedValue === 'string' && savedValue.length > 0) {
+      return savedValue;
+    }
+    return fallbackValue;
+  };
+
   const eventInvoices = useMemo(() => {
     if (!event) return invoices;
     return invoices.filter(inv => inv.event_id === event.id);
   }, [event, invoices]);
+
+  const supersededQuoteIds = useMemo(
+    () => new Set(quotes.map((q) => q.parent_quote_id).filter((parentId): parentId is string => Boolean(parentId))),
+    [quotes]
+  );
+
+  const quoteRevisionGroups = useMemo(() => {
+    if (quotes.length === 0) return [];
+
+    const quotesById = new Map(quotes.map((quote) => [quote.id, quote]));
+
+    const getRootQuoteId = (quote: Quote): string => {
+      let current = quote;
+      const seen = new Set<string>([quote.id]);
+
+      while (current.parent_quote_id) {
+        const parent = quotesById.get(current.parent_quote_id);
+        if (!parent || seen.has(parent.id)) break;
+        seen.add(parent.id);
+        current = parent;
+      }
+
+      return current.id;
+    };
+
+    const grouped = new Map<string, Quote[]>();
+    for (const quote of quotes) {
+      const rootId = getRootQuoteId(quote);
+      const bucket = grouped.get(rootId) || [];
+      bucket.push(quote);
+      grouped.set(rootId, bucket);
+    }
+
+    return Array.from(grouped.entries())
+      .map(([rootId, groupedQuotes]) => {
+        const sortedQuotes = groupedQuotes.sort((a, b) => (a.version || 1) - (b.version || 1));
+        const activeQuote = [...sortedQuotes].reverse().find((quote) => !supersededQuoteIds.has(quote.id)) || sortedQuotes[sortedQuotes.length - 1];
+
+        return {
+          rootId,
+          quotes: sortedQuotes,
+          activeQuote,
+        };
+      })
+      .sort((a, b) => {
+        const aDate = new Date(a.activeQuote?.created_at || 0).getTime();
+        const bDate = new Date(b.activeQuote?.created_at || 0).getTime();
+        return bDate - aDate;
+      });
+  }, [quotes, supersededQuoteIds]);
+
+  const activeEventQuoteId = useMemo(() => {
+    const eventQuotes = event ? quotes.filter((quoteEntry) => quoteEntry.event_id === event.id) : quotes;
+    if (eventQuotes.length === 0) return undefined;
+
+    const activeQuote = [...eventQuotes]
+      .reverse()
+      .find((quoteEntry) => !supersededQuoteIds.has(quoteEntry.id));
+
+    return activeQuote?.id || eventQuotes[eventQuotes.length - 1]?.id;
+  }, [event, quotes, supersededQuoteIds]);
+
+  const activeEventQuote = useMemo(() => {
+    if (!activeEventQuoteId) return null;
+    return quotes.find((quoteEntry) => quoteEntry.id === activeEventQuoteId) || null;
+  }, [activeEventQuoteId, quotes]);
+
+  const visibleInvoices = useMemo(() => {
+    if (showLegacyInvoices) return invoices;
+
+    return invoices.filter((invoiceEntry) => {
+      if (!invoiceEntry.quote_id || !activeEventQuoteId) return true;
+      return invoiceEntry.quote_id === activeEventQuoteId;
+    });
+  }, [activeEventQuoteId, invoices, showLegacyInvoices]);
 
   // Helper to format time for input fields (HH:mm:ss -> HH:mm)
   const formatTime = (timeStr?: string) => {
@@ -408,6 +548,16 @@ export default function ClientPortal() {
 
   const handlePayInvoice = async (targetInvoice: Invoice) => {
     if (!targetInvoice) return;
+
+    if (
+      targetInvoice.status === 'paid' ||
+      targetInvoice.status === 'cancelled' ||
+      targetInvoice.total_amount <= 0 ||
+      (targetInvoice.quote_id && activeEventQuoteId && targetInvoice.quote_id !== activeEventQuoteId)
+    ) {
+      toast.error('This invoice is not eligible for payment in the portal.');
+      return;
+    }
     
     const confirmed = await confirm({
       title: 'Confirm Payment',
@@ -540,6 +690,79 @@ export default function ClientPortal() {
     setIsFillingQuestionnaire(true);
   };
 
+  const syncQuestionnaireDataToCoreRecords = async (answers: Array<{ question_id: string; answer: string }>) => {
+    const answerMap = new Map(answers.map((entry) => [entry.question_id, entry.answer.trim()]));
+    const getAnswer = (field: string) => answerMap.get(field);
+
+    const fullName = getAnswer('client_full_name');
+    const firstNameFromFullName = fullName?.split(/\s+/).filter(Boolean)[0] || undefined;
+    const lastNameFromFullName = fullName
+      ? fullName.split(/\s+/).filter(Boolean).slice(1).join(' ') || undefined
+      : undefined;
+
+    if (client) {
+      await clientService.updateClient(client.id, {
+        ...(firstNameFromFullName ? { first_name: firstNameFromFullName } : {}),
+        ...(lastNameFromFullName ? { last_name: lastNameFromFullName } : {}),
+        ...(getAnswer('client_address') ? { address: getAnswer('client_address') } : {}),
+        ...(getAnswer('client_phone') ? { phone: getAnswer('client_phone') } : {}),
+        ...(getAnswer('client_email') ? { email: getAnswer('client_email') } : {}),
+        ...(getAnswer('client_role') ? { relationship: getAnswer('client_role') } : {}),
+        ...(getAnswer('client_instagram') ? { instagram: getAnswer('client_instagram') } : {}),
+      });
+    }
+
+    if (event) {
+      const guestCountRaw = getAnswer('event_guest_count');
+      const parsedGuestCount = guestCountRaw ? Number(guestCountRaw) : undefined;
+
+      await eventService.updateEvent(event.id, {
+        ...(getAnswer('event_type') ? { type: getAnswer('event_type') } : {}),
+        ...(getAnswer('event_date') ? { date: getAnswer('event_date') } : {}),
+        ...(getAnswer('event_name') ? { name: getAnswer('event_name') } : {}),
+        ...(getAnswer('event_start_time') ? { start_time: getAnswer('event_start_time') } : {}),
+        ...(getAnswer('event_end_time') ? { end_time: getAnswer('event_end_time') } : {}),
+        ...(getAnswer('event_hashtag') ? { hashtag: getAnswer('event_hashtag') } : {}),
+        ...(Number.isFinite(parsedGuestCount) ? { guest_count: parsedGuestCount } : {}),
+        ...(getAnswer('event_notes') ? { notes: getAnswer('event_notes') } : {}),
+        ...(getAnswer('venue_name') ? { venue_name: getAnswer('venue_name') } : {}),
+        ...(getAnswer('venue_sub_location') ? { venue_sub_location: getAnswer('venue_sub_location') } : {}),
+        ...(getAnswer('venue_address') ? { venue_address: getAnswer('venue_address') } : {}),
+        ...(getAnswer('venue_contact_name') ? { venue_contact_name: getAnswer('venue_contact_name') } : {}),
+        ...(getAnswer('venue_contact_phone') ? { venue_contact_phone: getAnswer('venue_contact_phone') } : {}),
+        ...(getAnswer('venue_contact_email') ? { venue_contact_email: getAnswer('venue_contact_email') } : {}),
+        ...(getAnswer('planner_company') ? { planner_company: getAnswer('planner_company') } : {}),
+        ...(getAnswer('planner_first_name') ? { planner_first_name: getAnswer('planner_first_name') } : {}),
+        ...(getAnswer('planner_last_name') ? { planner_last_name: getAnswer('planner_last_name') } : {}),
+        ...(getAnswer('planner_email') ? { planner_email: getAnswer('planner_email') } : {}),
+        ...(getAnswer('planner_phone') ? { planner_phone: getAnswer('planner_phone') } : {}),
+        ...(getAnswer('planner_instagram') ? { planner_instagram: getAnswer('planner_instagram') } : {}),
+        ...(getAnswer('event_day_of_contact_name') ? { day_of_contact_name: getAnswer('event_day_of_contact_name') } : {}),
+        ...(getAnswer('event_day_of_contact_phone') ? { day_of_contact_phone: getAnswer('event_day_of_contact_phone') } : {}),
+      });
+    }
+
+    if (venue) {
+      await venueService.updateVenue(venue.id, {
+        ...(getAnswer('venue_name') ? { name: getAnswer('venue_name') } : {}),
+        ...(getAnswer('venue_address') ? { address: getAnswer('venue_address') } : {}),
+        ...(getAnswer('venue_contact_phone') ? { phone: getAnswer('venue_contact_phone') } : {}),
+        ...(getAnswer('venue_contact_email') ? { email: getAnswer('venue_contact_email') } : {}),
+      });
+    }
+
+    if (planner) {
+      await plannerService.updatePlanner(planner.id, {
+        ...(getAnswer('planner_company') ? { company: getAnswer('planner_company') } : {}),
+        ...(getAnswer('planner_first_name') ? { first_name: getAnswer('planner_first_name') } : {}),
+        ...(getAnswer('planner_last_name') ? { last_name: getAnswer('planner_last_name') } : {}),
+        ...(getAnswer('planner_phone') ? { phone: getAnswer('planner_phone') } : {}),
+        ...(getAnswer('planner_email') ? { email: getAnswer('planner_email') } : {}),
+        ...(getAnswer('planner_instagram') ? { instagram: getAnswer('planner_instagram') } : {}),
+      });
+    }
+  };
+
   const submitQuestionnaire = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedQuestionnaire) return;
@@ -555,7 +778,42 @@ export default function ClientPortal() {
         .filter((item) => item.answer.trim().length > 0);
 
       await questionnaireService.saveAnswers(selectedQuestionnaire.id, answers);
-      toast.success('Questionnaire submitted');
+
+      try {
+        await activityLogService.logActivity({
+          entity_id: portalClientId || selectedQuestionnaire.client_id,
+          entity_type: 'client',
+          action: 'Questionnaire Completed',
+          details: `Questionnaire ${selectedQuestionnaire.id} completed in client portal`,
+        });
+      } catch (logError) {
+        console.error('Failed to log questionnaire completion activity:', logError);
+      }
+
+      let syncFailureMessage: string | null = null;
+      try {
+        await syncQuestionnaireDataToCoreRecords(answers);
+      } catch (syncError) {
+        syncFailureMessage = syncError instanceof Error ? syncError.message : 'Unknown sync error';
+        const activityEntityId = portalClientId || selectedQuestionnaire.client_id;
+
+        try {
+          await activityLogService.logActivity({
+            entity_id: activityEntityId,
+            entity_type: 'client',
+            action: 'Questionnaire Sync Failed',
+            details: `Questionnaire ${selectedQuestionnaire.id} saved, but core record sync failed: ${syncFailureMessage}`,
+          });
+        } catch (logError) {
+          console.error('Failed to log questionnaire sync failure:', logError);
+        }
+      }
+
+      if (syncFailureMessage) {
+        toast.success('Questionnaire submitted. Admin has been notified to review sync issues.');
+      } else {
+        toast.success('Questionnaire submitted and synced to your event records');
+      }
       setIsFillingQuestionnaire(false);
       if (portalClientId) {
         await loadPortalData(portalClientId);
@@ -595,7 +853,7 @@ export default function ClientPortal() {
       if (portalClientId) {
         await loadPortalData(portalClientId);
       }
-      setSelectedQuote(null);
+      closeQuoteDetail();
       setNextStepPrompt({
         title: 'Quote accepted',
         message: 'Great choice! Please complete your questionnaire so we can finalize the event details.',
@@ -650,7 +908,7 @@ export default function ClientPortal() {
     );
   }
 
-  const tabs: { id: PortalTab; label: string; icon: any }[] = [
+  const tabs: { id: PortalTab; label: string; icon: LucideIcon }[] = [
     { id: 'overview', label: 'Overview', icon: Layout },
     { id: 'quotes', label: 'Quotes', icon: DollarSign },
     { id: 'questionnaires', label: 'Questionnaires', icon: CheckSquare },
@@ -660,10 +918,10 @@ export default function ClientPortal() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
-      <header className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-700">
+      <header className="bg-white dark:bg-gray-800 shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white dark:text-white">Client Portal</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Client Portal</h1>
         </div>
       </header>
 
@@ -683,7 +941,7 @@ export default function ClientPortal() {
                         ? 'bg-secondary text-accent hover:text-accent hover:bg-secondary'
                         : locked
                         ? 'text-gray-400 cursor-not-allowed opacity-60'
-                        : 'text-gray-900 dark:text-white dark:text-white hover:text-gray-900 dark:text-white dark:text-white hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700'
+                        : 'text-gray-900 dark:text-white hover:text-gray-900 dark:text-white hover:bg-gray-50 dark:bg-gray-700'
                     } group rounded-md px-3 py-2 flex items-center text-sm font-medium w-full`}
                   >
                     <tab.icon
@@ -700,11 +958,11 @@ export default function ClientPortal() {
           </aside>
 
           <div className="space-y-6 sm:px-6 lg:px-0 lg:col-span-9">
-            <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6">
+            <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg p-6">
               {activeTab === 'overview' && (
                 <div className="text-center py-10">
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Welcome to your Event Portal</h2>
-                  <p className="mt-2 text-gray-500 dark:text-gray-400 dark:text-gray-400">Track your planning progress, view documents, and manage payments.</p>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Welcome to your Event Portal</h2>
+                  <p className="mt-2 text-gray-500 dark:text-gray-400">Track your planning progress, view documents, and manage payments.</p>
                   <div className="mt-8 flex justify-center space-x-4">
                     <div className="text-center cursor-pointer" onClick={() => !isTabLocked('quotes') && setActiveTab('quotes')}>
                       <div className={`rounded-full p-3 ${quote?.status === 'accepted' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'} hover:opacity-80 transition-opacity`}>
@@ -742,8 +1000,24 @@ export default function ClientPortal() {
                   {!selectedQuote ? (
                     // List View
                     <div>
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-6">Your Quotes</h3>
-                      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">Your Quotes</h3>
+                      {quoteRevisionGroups.length > 0 && (
+                        <div className="mb-4 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-4">
+                          <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Revision History</h4>
+                          <div className="space-y-2">
+                            {quoteRevisionGroups.map((group) => (
+                              <div key={group.rootId} className="text-xs text-gray-600 dark:text-gray-300 flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-gray-800 dark:text-gray-200">Chain:</span>
+                                <span>{group.quotes.map((quote) => `v${quote.version || 1}`).join(' → ')}</span>
+                                <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-semibold">
+                                  Active v{group.activeQuote?.version || 1}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
                         <ul className="divide-y divide-gray-200">
                           {quotes.map((q) => (
                             <li key={q.id}>
@@ -752,31 +1026,40 @@ export default function ClientPortal() {
                                   <div className="truncate">
                                     <div className="flex text-sm">
                                       <p className="font-medium text-primary truncate">{formatDocumentID('QT', event?.date || q.created_at)}</p>
-                                      <p className="ml-1 flex-shrink-0 font-normal text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                                      <p className="ml-1 flex-shrink-0 font-normal text-gray-500 dark:text-gray-400">
                                         for {event?.name || 'Event'}
                                       </p>
                                     </div>
                                     <div className="mt-2 flex">
-                                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                                         <p>
-                                          Created on {new Date(q.created_at).toLocaleDateString()}
+                                          Created on {new Date(q.created_at).toLocaleDateString()} • Revision v{q.version || 1}
                                         </p>
                                       </div>
                                     </div>
                                   </div>
                                   <div className="mt-4 flex-shrink-0 sm:mt-0 sm:ml-5">
-                                    <div className="flex overflow-hidden -space-x-1">
+                                    <div className="flex items-center space-x-2">
                                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                        q.status === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                        q.status === 'accepted'
+                                          ? 'bg-green-100 text-green-800'
+                                          : q.status === 'rejected'
+                                            ? 'bg-red-100 text-red-800'
+                                            : 'bg-yellow-100 text-yellow-800'
                                       }`}>
                                         {q.status.toUpperCase()}
                                       </span>
+                                      {supersededQuoteIds.has(q.id) && (
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                                          SUPERSEDED
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
                                 <div className="ml-5 flex-shrink-0">
                                   <button
-                                    onClick={() => setSelectedQuote(q)}
+                                    onClick={() => openQuoteDetail(q)}
                                     className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                                   >
                                     View
@@ -786,7 +1069,7 @@ export default function ClientPortal() {
                             </li>
                           ))}
                           {quotes.length === 0 && (
-                            <li className="px-4 py-4 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">No quotes available.</li>
+                            <li className="px-4 py-4 text-center text-gray-500 dark:text-gray-400">No quotes available.</li>
                           )}
                         </ul>
                       </div>
@@ -805,18 +1088,18 @@ export default function ClientPortal() {
                           <div className="flex justify-between items-center mb-6">
                             <div className="flex items-center">
                               <button 
-                                onClick={() => setSelectedQuote(null)} 
-                                className="mr-4 text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700"
+                                onClick={closeQuoteDetail}
+                                className="mr-4 text-gray-500 dark:text-gray-400 hover:text-gray-700"
                               >
                                 <ArrowLeft className="h-5 w-5" />
                               </button>
-                              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Quote Details</h3>
+                              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Quote Details</h3>
                             </div>
                             <div className="flex space-x-3">
                               <button
                                 onClick={() => handleDownloadQuote(selectedQuote)}
                                 disabled={quoteDownloading || !client}
-                                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+                                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 {quoteDownloading ? (
                                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -825,7 +1108,7 @@ export default function ClientPortal() {
                                 )}
                                 {quoteDownloading ? 'Preparing PDF...' : 'Download PDF'}
                               </button>
-                              {selectedQuote.status !== 'accepted' && (
+                              {selectedQuote.status !== 'accepted' && !supersededQuoteIds.has(selectedQuote.id) && (
                                 <button
                                   onClick={() => handleAcceptQuote(selectedQuote)}
                                   disabled={quoteActionLoading}
@@ -841,17 +1124,45 @@ export default function ClientPortal() {
                                   )}
                                 </button>
                               )}
+                              {supersededQuoteIds.has(selectedQuote.id) && (
+                                <span className="inline-flex items-center px-3 py-2 rounded-md text-xs font-semibold bg-gray-100 text-gray-700">
+                                  Superseded revision
+                                </span>
+                              )}
                             </div>
                           </div>
+
+                          {quoteDetailContext === 'legacy-invoice-jump' && (
+                            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                              <p>You opened this quote from a legacy invoice. This is the active revision for your event.</p>
+                              {quoteContextInvoiceId && (
+                                <button
+                                  onClick={() => {
+                                    const sourceInvoice = invoices.find((entry) => entry.id === quoteContextInvoiceId) || null;
+                                    setActiveTab('invoices');
+                                    closeQuoteDetail();
+                                    if (sourceInvoice) {
+                                      setSelectedInvoice(sourceInvoice);
+                                    }
+                                  }}
+                                  title="Return to invoice"
+                                  aria-label="Return to invoice"
+                                  className="mt-3 inline-flex items-center rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+                                >
+                                  Return to invoice
+                                </button>
+                              )}
+                            </div>
+                          )}
                           
-                          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 border rounded-lg shadow-sm overflow-hidden p-10">
+                          <div className="bg-white dark:bg-gray-800 border rounded-lg shadow-sm overflow-hidden p-10">
                             {/* PDF-Style Header */}
                             <div className="flex justify-between items-start mb-10">
                               <div>
                                 <h2 className="text-3xl font-serif text-gray-900 dark:text-white uppercase tracking-widest mb-2">Price Quote</h2>
                                 <div className="text-xs font-bold uppercase mb-1">{branding?.company_name || 'Oh My Desserts MX'}</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{branding?.address || 'Priv. Palmilla, Jardines del Sur II, Benito Juarez, Quintana Roo, 77535'}</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{branding?.website || 'www.ohmydessertsmx.com'} | {branding?.email || 'info@ohmydessertsmx.com'}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">{branding?.address || 'Priv. Palmilla, Jardines del Sur II, Benito Juarez, Quintana Roo, 77535'}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">{branding?.website || 'www.ohmydessertsmx.com'} | {branding?.email || 'info@ohmydessertsmx.com'}</div>
                               </div>
                               <div className="w-20 h-20 rounded-full bg-[#f5f0eb] flex items-center justify-center overflow-hidden">
                                 {branding?.logo_url ? (
@@ -865,28 +1176,28 @@ export default function ClientPortal() {
                             {/* Info Section */}
                             <div className="flex justify-between mb-8">
                               <div className="w-1/2">
-                                <h4 className="text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase mb-2">Bill To</h4>
-                                <div className="text-xs text-gray-900 dark:text-white dark:text-white">
+                                <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase mb-2">Bill To</h4>
+                                <div className="text-xs text-gray-900 dark:text-white">
                                   <p className="mb-1">{client?.first_name} {client?.last_name}</p>
-                                  <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">{client?.email}</p>
-                                  <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">{client?.phone}</p>
+                                  <p className="text-gray-500 dark:text-gray-400 mb-1">{client?.email}</p>
+                                  <p className="text-gray-500 dark:text-gray-400">{client?.phone}</p>
                                 </div>
                               </div>
                               <div className="w-1/2 pl-10">
                                 <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Quote #:</span>
+                                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Quote #:</span>
                                   <span className="text-xs text-right">{formatDocumentID('QT', event?.date || selectedQuote.created_at)}</span>
                                 </div>
                                 <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Date:</span>
+                                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Date:</span>
                                   <span className="text-xs text-right">{new Date(selectedQuote.created_at).toLocaleDateString()}</span>
                                 </div>
                                 <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Valid Until:</span>
+                                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Valid Until:</span>
                                   <span className="text-xs text-right">{new Date(selectedQuote.valid_until).toLocaleDateString()}</span>
                                 </div>
                                 <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Status:</span>
+                                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Status:</span>
                                   <span className={`text-xs text-right font-bold ${
                                     selectedQuote.status === 'accepted' ? 'text-green-600' : 
                                     selectedQuote.status === 'rejected' ? 'text-red-600' : 
@@ -895,7 +1206,7 @@ export default function ClientPortal() {
                                 </div>
                                 {showConvertedValues && (
                                   <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Exchange Rate:</span>
+                                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Exchange Rate:</span>
                                     <span className="text-xs text-right">1 {selectedQuote.currency} ≈ {formatCurrency(safeRate, 'MXN')}</span>
                                   </div>
                                 )}
@@ -905,20 +1216,20 @@ export default function ClientPortal() {
                             {/* Table */}
                             <div className="mb-8">
                               <div className="flex bg-[#f5f0eb] py-2 px-2 mb-2">
-                                <div className="w-6/12 text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase">Description</div>
-                                <div className="w-2/12 text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase text-right">Qty</div>
-                                <div className="w-2/12 text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase text-right">Price</div>
-                                <div className="w-2/12 text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase text-right">Amount</div>
+                                <div className="w-6/12 text-xs font-bold text-gray-900 dark:text-white uppercase">Description</div>
+                                <div className="w-2/12 text-xs font-bold text-gray-900 dark:text-white uppercase text-right">Qty</div>
+                                <div className="w-2/12 text-xs font-bold text-gray-900 dark:text-white uppercase text-right">Price</div>
+                                <div className="w-2/12 text-xs font-bold text-gray-900 dark:text-white uppercase text-right">Amount</div>
                               </div>
                               
                               {selectedQuote.items.map((item, index) => (
                                 <div key={index} className="flex border-b border-gray-100 py-2 px-2">
-                                  <div className="w-6/12 text-xs text-gray-900 dark:text-white dark:text-white">{item.description}</div>
-                                  <div className="w-2/12 text-xs text-gray-900 dark:text-white dark:text-white text-right">{item.quantity}</div>
-                                  <div className="w-2/12 text-xs text-gray-900 dark:text-white dark:text-white text-right">
+                                  <div className="w-6/12 text-xs text-gray-900 dark:text-white">{item.description}</div>
+                                  <div className="w-2/12 text-xs text-gray-900 dark:text-white text-right">{item.quantity}</div>
+                                  <div className="w-2/12 text-xs text-gray-900 dark:text-white text-right">
                                     {renderMoney(item.unit_price)}
                                   </div>
-                                  <div className="w-2/12 text-xs text-gray-900 dark:text-white dark:text-white text-right">
+                                  <div className="w-2/12 text-xs text-gray-900 dark:text-white text-right">
                                     {renderMoney(item.total)}
                                   </div>
                                 </div>
@@ -929,12 +1240,12 @@ export default function ClientPortal() {
                             <div className="flex justify-between mb-12">
                               {/* Terms */}
                               <div className="w-7/12 pr-8">
-                                <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-4 border border-gray-100 rounded">
-                                  <h5 className="text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase mb-2">Terms & Conditions</h5>
-                                  <p className="text-[10px] text-gray-500 dark:text-gray-400 dark:text-gray-400 leading-relaxed">
+                                <div className="bg-gray-50 dark:bg-gray-700 p-4 border border-gray-100 rounded">
+                                  <h5 className="text-xs font-bold text-gray-900 dark:text-white uppercase mb-2">Terms & Conditions</h5>
+                                  <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-relaxed">
                                     This quote is an estimate based on the event details provided and is subject to our standard Catering Services Agreement. Final pricing may vary if guest count, service time, location, or menu selections change.
                                   </p>
-                                  <p className="text-[10px] text-gray-500 dark:text-gray-400 dark:text-gray-400 leading-relaxed mt-3">
+                                  <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-relaxed mt-3">
                                     The booking is only confirmed once the corresponding contract is signed and the required retainer is received. By accepting this quote, the client acknowledges that all services will be provided in accordance with the terms and conditions set out in the Catering Services Agreement.
                                   </p>
                                 </div>
@@ -943,8 +1254,8 @@ export default function ClientPortal() {
                               {/* Totals */}
                               <div className="w-4/12">
                                 <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Subtotal</span>
-                                  <span className="text-xs text-gray-900 dark:text-white dark:text-white">
+                                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Subtotal</span>
+                                  <span className="text-xs text-gray-900 dark:text-white">
                                     {renderMoney(subtotalMXN)}
                                   </span>
                                 </div>
@@ -952,8 +1263,8 @@ export default function ClientPortal() {
                                 {selectedQuote.taxes && selectedQuote.taxes.length > 0 ? (
                                   selectedQuote.taxes.map((tax, index) => (
                                     <div key={index} className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                                      <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">{tax.name} ({tax.rate}%)</span>
-                                      <span className={`text-xs ${tax.is_retention ? 'text-red-600' : 'text-gray-900 dark:text-white dark:text-white'}`}>
+                                      <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">{tax.name} ({tax.rate}%)</span>
+                                      <span className={`text-xs ${tax.is_retention ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>
                                         {renderMoney(tax.is_retention ? -tax.amount : tax.amount)}
                                       </span>
                                     </div>
@@ -961,8 +1272,8 @@ export default function ClientPortal() {
                                 ) : (
                                   otherCharges > 0 && (
                                     <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                                      <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Tax</span>
-                                      <span className="text-xs text-gray-900 dark:text-white dark:text-white">
+                                      <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Tax</span>
+                                      <span className="text-xs text-gray-900 dark:text-white">
                                         {renderMoney(otherCharges)}
                                       </span>
                                     </div>
@@ -970,8 +1281,8 @@ export default function ClientPortal() {
                                 )}
 
                                 <div className="flex justify-between bg-[#f5f0eb] py-2 px-2 mt-2">
-                                  <span className="text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase">Amount Due</span>
-                                  <span className="text-xs font-bold text-gray-900 dark:text-white dark:text-white">
+                                  <span className="text-xs font-bold text-gray-900 dark:text-white uppercase">Amount Due</span>
+                                  <span className="text-xs font-bold text-gray-900 dark:text-white">
                                     {renderMoney(totalBase)}
                                   </span>
                                 </div>
@@ -980,7 +1291,7 @@ export default function ClientPortal() {
 
                             {/* Footer */}
                             <div className="border-t border-gray-100 pt-6 text-center">
-                              <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-widest bg-[#f5f0eb] inline-block px-4 py-1">
+                              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-widest bg-[#f5f0eb] inline-block px-4 py-1">
                                 Thank you for your business!
                               </p>
                             </div>
@@ -997,8 +1308,8 @@ export default function ClientPortal() {
                   {!selectedQuestionnaire ? (
                     // List View
                     <div>
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-6">Your Questionnaires</h3>
-                      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">Your Questionnaires</h3>
+                      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
                         <ul className="divide-y divide-gray-200">
                           {questionnaires.map((q) => (
                             <li key={q.id}>
@@ -1007,7 +1318,7 @@ export default function ClientPortal() {
                                   <div className="truncate">
                                     <div className="flex text-sm">
                                       <p className="font-medium text-primary truncate">{formatDocumentID('QST', event?.date || q.created_at)} - {q.title}</p>
-                                      <p className="ml-1 flex-shrink-0 font-normal text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                                      <p className="ml-1 flex-shrink-0 font-normal text-gray-500 dark:text-gray-400">
                                         Due on {q.due_date ? new Date(q.due_date).toLocaleDateString() : 'N/A'}
                                       </p>
                                     </div>
@@ -1034,7 +1345,7 @@ export default function ClientPortal() {
                             </li>
                           ))}
                           {questionnaires.length === 0 && (
-                            <li className="px-4 py-4 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">No questionnaires available.</li>
+                            <li className="px-4 py-4 text-center text-gray-500 dark:text-gray-400">No questionnaires available.</li>
                           )}
                         </ul>
                       </div>
@@ -1046,19 +1357,19 @@ export default function ClientPortal() {
                         <div className="flex items-center">
                           <button 
                             onClick={() => { setSelectedQuestionnaire(null); setIsFillingQuestionnaire(false); }} 
-                            className="mr-4 text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700"
+                            className="mr-4 text-gray-500 dark:text-gray-400 hover:text-gray-700"
                           >
                             <ArrowLeft className="h-5 w-5" />
                           </button>
-                          <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Event Questionnaire</h3>
+                          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Event Questionnaire</h3>
                         </div>
                       </div>
 
-                      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 border rounded-lg shadow-sm overflow-hidden mt-6">
-                        <div className="p-6 border-b bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 flex justify-between items-center">
+                      <div className="bg-white dark:bg-gray-800 border rounded-lg shadow-sm overflow-hidden mt-6">
+                        <div className="p-6 border-b bg-gray-50 dark:bg-gray-700 flex justify-between items-center">
                           <div>
-                            <h4 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">{selectedQuestionnaire.title}</h4>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1">Please complete this form to help us plan your event.</p>
+                            <h4 className="text-lg font-medium text-gray-900 dark:text-white">{selectedQuestionnaire.title}</h4>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Please complete this form to help us plan your event.</p>
                           </div>
                           <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
                             selectedQuestionnaire.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
@@ -1071,153 +1382,153 @@ export default function ClientPortal() {
                           <form onSubmit={submitQuestionnaire} className="p-8 space-y-8">
                             {/* Client Details */}
                             <div>
-                              <h5 className="text-md font-bold text-gray-900 dark:text-white dark:text-white mb-4 border-b pb-2">Client Details</h5>
+                              <h5 className="text-md font-bold text-gray-900 dark:text-white mb-4 border-b pb-2">Client Details</h5>
                               <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
                                 <div className="sm:col-span-2">
                                   <label className="block text-sm font-medium text-gray-700">Name (Full Legal Name)</label>
-                                  <input type="text" name="client_full_name" defaultValue={`${client?.first_name || ''} ${client?.last_name || ''}`} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="client_full_name" defaultValue={getQuestionnaireFieldValue('client_full_name', `${client?.first_name || ''} ${client?.last_name || ''}`.trim())} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div className="sm:col-span-2">
                                   <label className="block text-sm font-medium text-gray-700">Address (Complete)</label>
-                                  <input type="text" name="client_address" defaultValue={client?.address || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="client_address" defaultValue={getQuestionnaireFieldValue('client_address', client?.address || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Phone #</label>
-                                  <input type="tel" name="client_phone" defaultValue={client?.phone || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="tel" name="client_phone" defaultValue={getQuestionnaireFieldValue('client_phone', client?.phone || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Email</label>
-                                  <input type="email" name="client_email" defaultValue={client?.email || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="email" name="client_email" defaultValue={getQuestionnaireFieldValue('client_email', client?.email || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Role/Relationship</label>
-                                  <input type="text" name="client_role" defaultValue={client?.role || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" placeholder="e.g. Bride, Groom, Planner" />
+                                  <input type="text" name="client_role" defaultValue={getQuestionnaireFieldValue('client_role', client?.role || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" placeholder="e.g. Bride, Groom, Planner" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Social Media Usernames</label>
-                                  <input type="text" name="client_instagram" defaultValue={client?.instagram || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="client_instagram" defaultValue={getQuestionnaireFieldValue('client_instagram', client?.instagram || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                               </div>
                             </div>
 
                             {/* Event Details */}
                             <div>
-                              <h5 className="text-md font-bold text-gray-900 dark:text-white dark:text-white mb-4 border-b pb-2">Event Details</h5>
+                              <h5 className="text-md font-bold text-gray-900 dark:text-white mb-4 border-b pb-2">Event Details</h5>
                               <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Event Type</label>
-                                  <input type="text" name="event_type" defaultValue={event?.type || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="event_type" defaultValue={getQuestionnaireFieldValue('event_type', event?.type || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Event Date</label>
-                                  <input type="date" name="event_date" defaultValue={event?.date ? new Date(event.date).toISOString().split('T')[0] : ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="date" name="event_date" defaultValue={getQuestionnaireFieldValue('event_date', event?.date ? new Date(event.date).toISOString().split('T')[0] : '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div className="sm:col-span-2">
                                   <label className="block text-sm font-medium text-gray-700">Event Name</label>
-                                  <input type="text" name="event_name" defaultValue={event?.name || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="event_name" defaultValue={getQuestionnaireFieldValue('event_name', event?.name || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Event (Service) Start Time</label>
-                                  <input type="time" name="event_start_time" defaultValue={formatTime(event?.start_time)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="time" name="event_start_time" defaultValue={getQuestionnaireFieldValue('event_start_time', formatTime(event?.start_time))} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Event (Service) End Time</label>
-                                  <input type="time" name="event_end_time" defaultValue={formatTime(event?.end_time)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="time" name="event_end_time" defaultValue={getQuestionnaireFieldValue('event_end_time', formatTime(event?.end_time))} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Event HashTag(s)</label>
-                                  <input type="text" name="event_hashtag" defaultValue={event?.hashtag || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="event_hashtag" defaultValue={getQuestionnaireFieldValue('event_hashtag', event?.hashtag || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Guest Count</label>
-                                  <input type="number" name="event_guest_count" defaultValue={event?.guest_count || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="number" name="event_guest_count" defaultValue={getQuestionnaireFieldValue('event_guest_count', event?.guest_count ? String(event.guest_count) : '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                               </div>
                             </div>
 
                             {/* Venue Details */}
                             <div>
-                              <h5 className="text-md font-bold text-gray-900 dark:text-white dark:text-white mb-4 border-b pb-2">Venue Details</h5>
+                              <h5 className="text-md font-bold text-gray-900 dark:text-white mb-4 border-b pb-2">Venue Details</h5>
                               <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Venue Name</label>
-                                  <input type="text" name="venue_name" defaultValue={venue?.name || event?.venue_name || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="venue_name" defaultValue={getQuestionnaireFieldValue('venue_name', venue?.name || event?.venue_name || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Venue Sub-Location</label>
-                                  <input type="text" name="venue_sub_location" defaultValue={event?.venue_sub_location || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="venue_sub_location" defaultValue={getQuestionnaireFieldValue('venue_sub_location', event?.venue_sub_location || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div className="sm:col-span-2">
                                   <label className="block text-sm font-medium text-gray-700">Venue Address (Complete)</label>
-                                  <input type="text" name="venue_address" defaultValue={venue?.address || event?.venue_address || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="venue_address" defaultValue={getQuestionnaireFieldValue('venue_address', venue?.address || event?.venue_address || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Venue Main Contact Name</label>
-                                  <input type="text" name="venue_contact_name" defaultValue={event?.venue_contact_name || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="venue_contact_name" defaultValue={getQuestionnaireFieldValue('venue_contact_name', event?.venue_contact_name || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Venue Main Contact Phone #</label>
-                                  <input type="tel" name="venue_contact_phone" defaultValue={venue?.phone || event?.venue_contact_phone || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="tel" name="venue_contact_phone" defaultValue={getQuestionnaireFieldValue('venue_contact_phone', venue?.phone || event?.venue_contact_phone || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div className="sm:col-span-2">
                                   <label className="block text-sm font-medium text-gray-700">Venue Main Contact Email</label>
-                                  <input type="email" name="venue_contact_email" defaultValue={venue?.email || event?.venue_contact_email || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="email" name="venue_contact_email" defaultValue={getQuestionnaireFieldValue('venue_contact_email', venue?.email || event?.venue_contact_email || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                               </div>
                             </div>
 
                             {/* External Planner Details */}
                             <div>
-                              <h5 className="text-md font-bold text-gray-900 dark:text-white dark:text-white mb-4 border-b pb-2">External Planner Details</h5>
+                              <h5 className="text-md font-bold text-gray-900 dark:text-white mb-4 border-b pb-2">External Planner Details</h5>
                               <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
                                 <div className="sm:col-span-2">
                                   <label className="block text-sm font-medium text-gray-700">Planner Agency/Company Name</label>
-                                  <input type="text" name="planner_company" defaultValue={planner?.company || event?.planner_company || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="planner_company" defaultValue={getQuestionnaireFieldValue('planner_company', planner?.company || event?.planner_company || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Lead Planner First Name</label>
-                                  <input type="text" name="planner_first_name" defaultValue={planner?.first_name || event?.planner_first_name || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="planner_first_name" defaultValue={getQuestionnaireFieldValue('planner_first_name', planner?.first_name || event?.planner_first_name || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Lead Planner Last Name</label>
-                                  <input type="text" name="planner_last_name" defaultValue={planner?.last_name || event?.planner_last_name || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="planner_last_name" defaultValue={getQuestionnaireFieldValue('planner_last_name', planner?.last_name || event?.planner_last_name || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Lead Planner Phone</label>
-                                  <input type="tel" name="planner_phone" defaultValue={planner?.phone || event?.planner_phone || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="tel" name="planner_phone" defaultValue={getQuestionnaireFieldValue('planner_phone', planner?.phone || event?.planner_phone || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Lead Planner Email</label>
-                                  <input type="email" name="planner_email" defaultValue={planner?.email || event?.planner_email || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="email" name="planner_email" defaultValue={getQuestionnaireFieldValue('planner_email', planner?.email || event?.planner_email || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div className="sm:col-span-2">
                                   <label className="block text-sm font-medium text-gray-700">Lead Planner Instagram Handle</label>
-                                  <input type="text" name="planner_instagram" defaultValue={planner?.instagram || event?.planner_instagram || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="planner_instagram" defaultValue={getQuestionnaireFieldValue('planner_instagram', planner?.instagram || event?.planner_instagram || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                               </div>
                             </div>
 
                             {/* Day-of Coordinator */}
                             <div>
-                              <h5 className="text-md font-bold text-gray-900 dark:text-white dark:text-white mb-4 border-b pb-2">Day-of Coordinator (If different from Lead Planner)</h5>
+                              <h5 className="text-md font-bold text-gray-900 dark:text-white mb-4 border-b pb-2">Day-of Coordinator (If different from Lead Planner)</h5>
                               <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Day-of Contact Name</label>
-                                  <input type="text" name="event_day_of_contact_name" defaultValue={event?.day_of_contact_name || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="text" name="event_day_of_contact_name" defaultValue={getQuestionnaireFieldValue('event_day_of_contact_name', event?.day_of_contact_name || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700">Day-of Contact Mobile #</label>
-                                  <input type="tel" name="event_day_of_contact_phone" defaultValue={event?.day_of_contact_phone || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                                  <input type="tel" name="event_day_of_contact_phone" defaultValue={getQuestionnaireFieldValue('event_day_of_contact_phone', event?.day_of_contact_phone || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                                 </div>
                               </div>
                             </div>
 
                             {/* Additional Details */}
                             <div>
-                              <h5 className="text-md font-bold text-gray-900 dark:text-white dark:text-white mb-4 border-b pb-2">Additional Details</h5>
+                              <h5 className="text-md font-bold text-gray-900 dark:text-white mb-4 border-b pb-2">Additional Details</h5>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700">Notes / Special Requests</label>
-                                <textarea rows={4} name="event_notes" defaultValue={event?.notes || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" placeholder="Any other details we should know?"></textarea>
+                                <textarea rows={4} name="event_notes" defaultValue={getQuestionnaireFieldValue('event_notes', event?.notes || '')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm" placeholder="Any other details we should know?"></textarea>
                               </div>
                             </div>
 
@@ -1225,7 +1536,7 @@ export default function ClientPortal() {
                               <button
                                 type="button"
                                 onClick={() => setIsFillingQuestionnaire(false)}
-                                className="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none"
+                                className="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none"
                               >
                                 {selectedQuestionnaire.status === 'completed' ? 'Close' : 'Cancel'}
                               </button>
@@ -1242,10 +1553,10 @@ export default function ClientPortal() {
                             <div className="mx-auto h-24 w-24 bg-secondary rounded-full flex items-center justify-center mb-4">
                               <ClipboardList className="h-12 w-12 text-primary" />
                             </div>
-                            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-2">
+                            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                               {selectedQuestionnaire.status === 'completed' ? 'Thank You!' : 'Action Required'}
                             </h3>
-                            <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400 max-w-md mx-auto mb-6">
+                            <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-6">
                               {selectedQuestionnaire.status === 'completed' 
                                 ? 'You have successfully submitted this questionnaire. We will review your answers shortly.' 
                                 : 'We need a few more details about your event. Please take a moment to fill out this questionnaire.'}
@@ -1262,7 +1573,7 @@ export default function ClientPortal() {
                             ) : (
                               <button
                                 onClick={() => setIsFillingQuestionnaire(true)}
-                                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                               >
                                 View Responses
                               </button>
@@ -1280,8 +1591,8 @@ export default function ClientPortal() {
                   {!selectedContract ? (
                     // List View
                     <div>
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-6">Your Contracts</h3>
-                      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">Your Contracts</h3>
+                      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
                         <ul className="divide-y divide-gray-200">
                           {contracts.map((con) => (
                             <li key={con.id}>
@@ -1290,7 +1601,7 @@ export default function ClientPortal() {
                                   <div className="truncate">
                                     <div className="flex text-sm">
                                       <p className="font-medium text-primary truncate">{formatDocumentID('CON', event?.date || con.created_at)}</p>
-                                      <p className="ml-1 flex-shrink-0 font-normal text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                                      <p className="ml-1 flex-shrink-0 font-normal text-gray-500 dark:text-gray-400">
                                         Created on {new Date(con.created_at).toLocaleDateString()}
                                       </p>
                                     </div>
@@ -1317,7 +1628,7 @@ export default function ClientPortal() {
                             </li>
                           ))}
                           {contracts.length === 0 && (
-                            <li className="px-4 py-4 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">No contracts available.</li>
+                            <li className="px-4 py-4 text-center text-gray-500 dark:text-gray-400">No contracts available.</li>
                           )}
                         </ul>
                       </div>
@@ -1329,17 +1640,17 @@ export default function ClientPortal() {
                         <div className="flex items-center">
                           <button 
                             onClick={() => setSelectedContract(null)} 
-                            className="mr-4 text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700"
+                            className="mr-4 text-gray-500 dark:text-gray-400 hover:text-gray-700"
                           >
                             <ArrowLeft className="h-5 w-5" />
                           </button>
-                          <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Service Contract</h3>
+                          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Service Contract</h3>
                         </div>
                         <div className="flex space-x-3">
                           {selectedContract.status === 'signed' && (
                             <button
                               onClick={() => handleDownloadContract(selectedContract)}
-                              className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                              className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                             >
                               <Download className="h-4 w-4 mr-2" />
                               Download PDF
@@ -1348,14 +1659,14 @@ export default function ClientPortal() {
                         </div>
                       </div>
                       
-                        <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 border rounded-lg shadow-sm overflow-hidden p-10">
+                        <div className="bg-white dark:bg-gray-800 border rounded-lg shadow-sm overflow-hidden p-10">
                         {/* PDF-Style Header */}
                         <div className="flex justify-between items-start mb-10">
                           <div>
-                            <h2 className="text-3xl font-serif text-gray-900 dark:text-white dark:text-white uppercase tracking-widest mb-2">Contract</h2>
+                            <h2 className="text-3xl font-serif text-gray-900 dark:text-white uppercase tracking-widest mb-2">Contract</h2>
                             <div className="text-xs font-bold uppercase mb-1">{branding?.company_name || 'Oh My Desserts MX'}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{branding?.address || 'Priv. Palmilla, Jardines del Sur II, Benito Juarez, Quintana Roo, 77535'}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{branding?.website || 'www.ohmydessertsmx.com'} | {branding?.email || 'info@ohmydessertsmx.com'}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{branding?.address || 'Priv. Palmilla, Jardines del Sur II, Benito Juarez, Quintana Roo, 77535'}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{branding?.website || 'www.ohmydessertsmx.com'} | {branding?.email || 'info@ohmydessertsmx.com'}</div>
                           </div>
                           <div className="w-20 h-20 rounded-full bg-[#f5f0eb] flex items-center justify-center overflow-hidden">
                             {branding?.logo_url ? (
@@ -1369,26 +1680,26 @@ export default function ClientPortal() {
                         {/* Info Section */}
                         <div className="flex justify-between mb-8">
                           <div className="w-1/2">
-                            <h4 className="text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase mb-2">Client</h4>
-                            <div className="text-xs text-gray-900 dark:text-white dark:text-white">
+                            <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase mb-2">Client</h4>
+                            <div className="text-xs text-gray-900 dark:text-white">
                               <p className="mb-1">{client?.first_name} {client?.last_name}</p>
-                              <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">{client?.email}</p>
-                              <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">{client?.phone}</p>
+                              <p className="text-gray-500 dark:text-gray-400 mb-1">{client?.email}</p>
+                              <p className="text-gray-500 dark:text-gray-400">{client?.phone}</p>
                             </div>
                           </div>
                           <div className="w-1/2 pl-10">
                             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Contract ID:</span>
+                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Contract ID:</span>
                               <span className="text-xs text-right font-mono">
                                 {formatDocumentID('CON', event?.date || selectedContract.created_at)}
                               </span>
                             </div>
                             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Date:</span>
+                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Date:</span>
                               <span className="text-xs text-right">{new Date(selectedContract.created_at).toLocaleDateString()}</span>
                             </div>
                             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Status:</span>
+                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Status:</span>
                               <span className={`text-xs text-right font-bold ${
                                 selectedContract.status === 'signed' ? 'text-green-600' : 'text-yellow-600'
                               }`}>{selectedContract.status.toUpperCase()}</span>
@@ -1508,7 +1819,7 @@ export default function ClientPortal() {
                               <div className="border-b border-gray-900 mb-2 pb-2">
                                 {branding?.company_name || 'Oh My Desserts MX'}
                               </div>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Service Provider Signature</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">Service Provider Signature</p>
                             </div>
                             
                             <div className="w-5/12">
@@ -1528,7 +1839,7 @@ export default function ClientPortal() {
                                 )}
                               </div>
                               <div className="flex justify-between">
-                                <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Client Signature</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">Client Signature</p>
                                 {selectedContract.signed_at && (
                                   <p className="text-[10px] text-gray-400">
                                     {new Date(selectedContract.signed_at).toLocaleDateString()}
@@ -1563,7 +1874,7 @@ export default function ClientPortal() {
 
                         {/* Footer */}
                         <div className="mt-12 text-center">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-widest bg-[#f5f0eb] inline-block px-4 py-1">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-widest bg-[#f5f0eb] inline-block px-4 py-1">
                             {selectedContract.status === 'signed' ? 'Document Signed & Valid' : 'Please Review & Sign'}
                           </p>
                         </div>
@@ -1578,25 +1889,77 @@ export default function ClientPortal() {
                   {!selectedInvoice ? (
                     // List View
                     <div>
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-6">Your Invoices</h3>
-                      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+                      <div className="mb-6 flex items-center justify-between">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white">Your Invoices</h3>
+                        <label className="inline-flex items-center text-xs text-gray-600 dark:text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={showLegacyInvoices}
+                            onChange={(e) => setShowLegacyInvoices(e.target.checked)}
+                            className="mr-2 rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                          Show legacy invoices
+                        </label>
+                      </div>
+                      <div className="mb-4 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-4">
+                        <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Invoice Labels</h4>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-green-100 text-green-800">
+                            CURRENT REVISION
+                          </span>
+                          <span>Invoices tied to your latest approved quote changes.</span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-gray-100 text-gray-700">
+                            LEGACY REVISION
+                          </span>
+                          <span>Invoices from older quote versions kept for history.</span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-indigo-100 text-indigo-800">
+                            CREDIT
+                          </span>
+                          <span>Applied payments/adjustments carried into the latest revision.</span>
+                        </div>
+                      </div>
+                      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
                         <ul className="divide-y divide-gray-200">
-                          {invoices.map((inv) => (
+                          {visibleInvoices.map((inv) => {
+                            const isCreditInvoice = inv.type === 'change_order' || inv.total_amount < 0;
+                            const isLegacyInvoice = Boolean(inv.quote_id && activeEventQuoteId && inv.quote_id !== activeEventQuoteId);
+
+                            return (
                             <li key={inv.id}>
                               <div className="px-4 py-4 flex items-center sm:px-6">
                                 <div className="min-w-0 flex-1 sm:flex sm:items-center sm:justify-between">
                                   <div className="truncate">
                                     <div className="flex text-sm">
                                       <p className="font-medium text-primary truncate">{formatDocumentID('INV', event?.date || inv.created_at)}</p>
-                                      <p className="ml-1 flex-shrink-0 font-normal text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                                      <p className="ml-1 flex-shrink-0 font-normal text-gray-500 dark:text-gray-400">
                                         ${inv.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                       </p>
                                     </div>
                                     <div className="mt-2 flex">
-                                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                                         <p>
                                           Due on {new Date(inv.due_date).toLocaleDateString()}
                                         </p>
+                                      </div>
+                                      <div className="ml-2 flex items-center space-x-2">
+                                        {isCreditInvoice && (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-800">
+                                            CREDIT
+                                          </span>
+                                        )}
+                                        {isLegacyInvoice ? (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-700">
+                                            LEGACY REVISION
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-800">
+                                            CURRENT REVISION
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
@@ -1604,6 +1967,7 @@ export default function ClientPortal() {
                                     <div className="flex overflow-hidden -space-x-1">
                                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                         inv.status === 'paid' ? 'bg-green-100 text-green-800' : 
+                                        inv.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
                                         inv.status === 'overdue' ? 'bg-red-100 text-red-800' : 
                                         'bg-blue-100 text-blue-800'
                                       }`}>
@@ -1613,18 +1977,31 @@ export default function ClientPortal() {
                                   </div>
                                 </div>
                                 <div className="ml-5 flex-shrink-0">
-                                  <button
-                                    onClick={() => setSelectedInvoice(inv)}
-                                    className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                                  >
-                                    View
-                                  </button>
+                                  <div className="flex items-center space-x-2">
+                                    {isLegacyInvoice && activeEventQuote && (
+                                      <button
+                                        onClick={() => openQuoteFromLegacyInvoice(activeEventQuote, inv.id)}
+                                        title="View active quote"
+                                        aria-label="View active quote"
+                                        className="group relative w-full flex justify-center py-2 px-4 border border-gray-300 text-sm font-medium rounded-md text-primary bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                                      >
+                                        View active quote
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => setSelectedInvoice(inv)}
+                                      className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                                    >
+                                      View
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             </li>
-                          ))}
-                          {invoices.length === 0 && (
-                            <li className="px-4 py-4 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">No invoices available.</li>
+                            );
+                          })}
+                          {visibleInvoices.length === 0 && (
+                            <li className="px-4 py-4 text-center text-gray-500 dark:text-gray-400">No invoices available for the current filter.</li>
                           )}
                         </ul>
                       </div>
@@ -1632,33 +2009,64 @@ export default function ClientPortal() {
                   ) : (
                     // Detail View
                     <div>
+                      {(() => {
+                        const isCreditInvoice = selectedInvoice.type === 'change_order' || selectedInvoice.total_amount < 0;
+                        const isLegacyInvoice = Boolean(selectedInvoice.quote_id && activeEventQuoteId && selectedInvoice.quote_id !== activeEventQuoteId);
+
+                        return (
+                          <div className="mb-4 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 p-3 text-xs text-gray-600 dark:text-gray-300">
+                            <div>
+                              {isCreditInvoice
+                                ? 'This is a credit entry applied to your account after quote revisions.'
+                                : isLegacyInvoice
+                                  ? 'This invoice belongs to an older quote revision and is shown for historical reference.'
+                                  : 'This invoice belongs to your current quote revision and is active.'}
+                            </div>
+                            {isLegacyInvoice && activeEventQuote && (
+                              <div className="mt-3">
+                                <button
+                                  onClick={() => {
+                                    setSelectedInvoice(null);
+                                    openQuoteFromLegacyInvoice(activeEventQuote, selectedInvoice.id);
+                                  }}
+                                  title="View active quote"
+                                  aria-label="View active quote"
+                                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-primary bg-white hover:bg-gray-50"
+                                >
+                                  View active quote
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <div className="flex justify-between items-center mb-6">
                         <div className="flex items-center">
                           <button 
                             onClick={() => setSelectedInvoice(null)} 
-                            className="mr-4 text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700"
+                            className="mr-4 text-gray-500 dark:text-gray-400 hover:text-gray-700"
                           >
                             <ArrowLeft className="h-5 w-5" />
                           </button>
-                          <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Invoice Details</h3>
+                          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Invoice Details</h3>
                         </div>
                         <button
                           onClick={() => handleDownloadInvoice(selectedInvoice)}
-                          className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                          className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                         >
                           <Download className="h-4 w-4 mr-2" />
                           Download PDF
                         </button>
                       </div>
 
-                      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 border rounded-lg shadow-sm overflow-hidden p-10">
+                      <div className="bg-white dark:bg-gray-800 border rounded-lg shadow-sm overflow-hidden p-10">
                         {/* PDF-Style Header */}
                         <div className="flex justify-between items-start mb-10">
                           <div>
-                            <h2 className="text-3xl font-serif text-gray-900 dark:text-white dark:text-white uppercase tracking-widest mb-2">Invoice</h2>
+                            <h2 className="text-3xl font-serif text-gray-900 dark:text-white uppercase tracking-widest mb-2">Invoice</h2>
                             <div className="text-xs font-bold uppercase mb-1">{branding?.company_name || 'Oh My Desserts MX'}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{branding?.address || 'Priv. Palmilla, Jardines del Sur II, Benito Juarez, Quintana Roo, 77535'}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">{branding?.website || 'www.ohmydessertsmx.com'} | {branding?.email || 'info@ohmydessertsmx.com'}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{branding?.address || 'Priv. Palmilla, Jardines del Sur II, Benito Juarez, Quintana Roo, 77535'}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{branding?.website || 'www.ohmydessertsmx.com'} | {branding?.email || 'info@ohmydessertsmx.com'}</div>
                           </div>
                           <div className="w-20 h-20 rounded-full bg-[#f5f0eb] flex items-center justify-center overflow-hidden">
                             {branding?.logo_url ? (
@@ -1672,33 +2080,44 @@ export default function ClientPortal() {
                         {/* Info Section */}
                         <div className="flex justify-between mb-8">
                           <div className="w-1/2">
-                            <h4 className="text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase mb-2">Bill To</h4>
-                            <div className="text-xs text-gray-900 dark:text-white dark:text-white">
+                            <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase mb-2">Bill To</h4>
+                            <div className="text-xs text-gray-900 dark:text-white">
                               <p className="mb-1">{client?.first_name} {client?.last_name}</p>
-                              <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-1">{client?.email}</p>
-                              <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">{client?.phone}</p>
+                              <p className="text-gray-500 dark:text-gray-400 mb-1">{client?.email}</p>
+                              <p className="text-gray-500 dark:text-gray-400">{client?.phone}</p>
                             </div>
                           </div>
                           <div className="w-1/2 pl-10">
                             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Invoice #:</span>
+                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Invoice #:</span>
                               <span className="text-xs text-right">{formatDocumentID('INV', event?.date || selectedInvoice.created_at)}</span>
                             </div>
                             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Date:</span>
+                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Date:</span>
                               <span className="text-xs text-right">{new Date(selectedInvoice.created_at).toLocaleDateString()}</span>
                             </div>
                             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Due Date:</span>
+                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Due Date:</span>
                               <span className="text-xs text-right">{new Date(selectedInvoice.due_date).toLocaleDateString()}</span>
                             </div>
                             <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase">Status:</span>
+                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Status:</span>
                               <span className={`text-xs text-right font-bold ${
                                 selectedInvoice.status === 'paid' ? 'text-green-600' : 
+                                selectedInvoice.status === 'cancelled' ? 'text-gray-600' :
                                 selectedInvoice.status === 'overdue' ? 'text-red-600' : 
                                 'text-blue-600'
                               }`}>{selectedInvoice.status.toUpperCase()}</span>
+                            </div>
+                            <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
+                              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Revision:</span>
+                              <span className="text-xs text-right font-bold text-gray-700">
+                                {selectedInvoice.type === 'change_order' || selectedInvoice.total_amount < 0
+                                  ? 'CREDIT'
+                                  : selectedInvoice.quote_id && activeEventQuoteId && selectedInvoice.quote_id !== activeEventQuoteId
+                                    ? 'LEGACY REVISION'
+                                    : 'CURRENT REVISION'}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1706,26 +2125,26 @@ export default function ClientPortal() {
                         {/* Table */}
                         <div className="mb-8">
                           <div className="flex bg-[#f5f0eb] py-2 px-2 mb-2">
-                            <div className="w-1/12 text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase text-center">No</div>
-                            <div className="w-8/12 text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase">Description</div>
-                            <div className="w-3/12 text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase text-right">Amount</div>
+                            <div className="w-1/12 text-xs font-bold text-gray-900 dark:text-white uppercase text-center">No</div>
+                            <div className="w-8/12 text-xs font-bold text-gray-900 dark:text-white uppercase">Description</div>
+                            <div className="w-3/12 text-xs font-bold text-gray-900 dark:text-white uppercase text-right">Amount</div>
                           </div>
                           
                           {selectedInvoice.items && selectedInvoice.items.length > 0 ? (
                             selectedInvoice.items.map((item, index) => (
                               <div key={index} className="flex border-b border-gray-100 py-2 px-2">
-                                <div className="w-1/12 text-xs text-gray-900 dark:text-white dark:text-white text-center">{index + 1}</div>
-                                <div className="w-8/12 text-xs text-gray-900 dark:text-white dark:text-white">{item.description}</div>
-                                <div className="w-3/12 text-xs text-gray-900 dark:text-white dark:text-white text-right">
+                                <div className="w-1/12 text-xs text-gray-900 dark:text-white text-center">{index + 1}</div>
+                                <div className="w-8/12 text-xs text-gray-900 dark:text-white">{item.description}</div>
+                                <div className="w-3/12 text-xs text-gray-900 dark:text-white text-right">
                                   ${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </div>
                               </div>
                             ))
                           ) : (
                             <div className="flex border-b border-gray-100 py-2 px-2">
-                              <div className="w-1/12 text-xs text-gray-900 dark:text-white dark:text-white text-center">1</div>
-                              <div className="w-8/12 text-xs text-gray-900 dark:text-white dark:text-white">Invoice Services</div>
-                              <div className="w-3/12 text-xs text-gray-900 dark:text-white dark:text-white text-right">
+                              <div className="w-1/12 text-xs text-gray-900 dark:text-white text-center">1</div>
+                              <div className="w-8/12 text-xs text-gray-900 dark:text-white">Invoice Services</div>
+                              <div className="w-3/12 text-xs text-gray-900 dark:text-white text-right">
                                 ${selectedInvoice.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </div>
                             </div>
@@ -1736,8 +2155,8 @@ export default function ClientPortal() {
                         <div className="flex justify-end mb-12">
                           <div className="w-5/12">
                             <div className="flex justify-between bg-[#f5f0eb] py-2 px-2 mt-2">
-                              <span className="text-xs font-bold text-gray-900 dark:text-white dark:text-white uppercase">Total</span>
-                              <span className="text-xs font-bold text-gray-900 dark:text-white dark:text-white">
+                              <span className="text-xs font-bold text-gray-900 dark:text-white uppercase">Total</span>
+                              <span className="text-xs font-bold text-gray-900 dark:text-white">
                                 ${selectedInvoice.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </span>
                             </div>
@@ -1746,14 +2165,17 @@ export default function ClientPortal() {
 
                         {/* Footer */}
                         <div className="border-t border-gray-100 pt-6 text-center">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-widest bg-[#f5f0eb] inline-block px-4 py-1">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-widest bg-[#f5f0eb] inline-block px-4 py-1">
                             Thank you for your business!
                           </p>
                         </div>
 
                         {/* Actions */}
                         <div className="mt-8 flex justify-end">
-                          {selectedInvoice.status !== 'paid' && (
+                          {selectedInvoice.status !== 'paid' &&
+                            selectedInvoice.status !== 'cancelled' &&
+                            selectedInvoice.total_amount > 0 &&
+                            !(selectedInvoice.quote_id && activeEventQuoteId && selectedInvoice.quote_id !== activeEventQuoteId) && (
                             <button
                               onClick={() => handlePayInvoice(selectedInvoice)}
                               className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
@@ -1771,7 +2193,7 @@ export default function ClientPortal() {
 
               {activeTab === 'reviews' && (
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4">Leave a Review</h3>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Leave a Review</h3>
                   <div className="text-center py-8">
                     <div className="flex justify-center space-x-2 mb-4">
                       {[1, 2, 3, 4, 5].map((star) => (
@@ -1797,10 +2219,10 @@ export default function ClientPortal() {
       {/* Processing Overlay */}
       {processing && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-lg p-8 max-w-sm w-full text-center shadow-xl">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-sm w-full text-center shadow-xl">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-2">Processing...</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Please wait while we save your changes.</p>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Processing...</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Please wait while we save your changes.</p>
           </div>
         </div>
       )}

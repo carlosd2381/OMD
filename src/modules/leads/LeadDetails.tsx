@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Mail, Phone, Calendar, Users, MapPin, Tag, UserPlus } from 'lucide-react';
 import { leadService } from '../../services/leadService';
 import { clientService } from '../../services/clientService';
 import { eventService } from '../../services/eventService';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { isPastDate } from '../../utils/formatters';
 import type { Lead } from '../../types/lead';
 import NotesTab from '../../components/NotesTab';
 import toast from 'react-hot-toast';
@@ -42,13 +43,7 @@ export default function LeadDetails() {
     }
   }, [activeTab, lead?.email]);
 
-  useEffect(() => {
-    if (id) {
-      loadLead(id);
-    }
-  }, [id]);
-
-  const loadLead = async (leadId: string) => {
+  const loadLead = useCallback(async (leadId: string) => {
     try {
       const data = await leadService.getLead(leadId);
       if (data) {
@@ -62,7 +57,13 @@ export default function LeadDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    if (id) {
+      loadLead(id);
+    }
+  }, [id, loadLead]);
 
   const handleConvertToClient = async () => {
     if (!lead) return;
@@ -140,10 +141,10 @@ export default function LeadDetails() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link to="/leads" className="text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700">
+          <Link to="/leads" className="text-gray-500 dark:text-gray-400 hover:text-gray-700">
             <ArrowLeft className="h-6 w-6" />
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">{lead.first_name} {lead.last_name}</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{lead.first_name} {lead.last_name}</h1>
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(lead.status)}`}>
             {lead.status}
           </span>
@@ -168,14 +169,14 @@ export default function LeadDetails() {
         </div>
       </div>
 
-      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+      <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
           <button
             onClick={() => setActiveTab('overview')}
             className={`${
               activeTab === 'overview'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
           >
             Overview
@@ -185,7 +186,7 @@ export default function LeadDetails() {
             className={`${
               activeTab === 'messages'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
           >
             Messages
@@ -195,7 +196,7 @@ export default function LeadDetails() {
             className={`${
               activeTab === 'notes'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
           >
             Notes
@@ -206,33 +207,33 @@ export default function LeadDetails() {
       {activeTab === 'overview' && (
         <div className="space-y-6">
           {/* Client Details Section */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
             <div className="px-4 py-5 sm:px-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Client Details</h3>
+              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Client Details</h3>
             </div>
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 px-4 py-5 sm:px-6">
+            <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
               <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                 <div className="sm:col-span-1">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Full Name</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{lead.first_name} {lead.last_name}</dd>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Full Name</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white">{lead.first_name} {lead.last_name}</dd>
                 </div>
                 <div className="sm:col-span-1">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Role</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{lead.role || 'N/A'}</dd>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Role</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white">{lead.role || 'N/A'}</dd>
                 </div>
                 <div className="sm:col-span-1">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Email</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex items-center">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white flex items-center">
                     <Mail className="h-4 w-4 mr-2 text-gray-400" />
                     <a href={`mailto:${lead.email}`} className="text-primary hover:text-primary/80">{lead.email}</a>
                   </dd>
                 </div>
                 <div className="sm:col-span-1">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Phone</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex items-center">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white flex items-center">
                     <Phone className="h-4 w-4 mr-2 text-gray-400" />
                     {lead.phone ? (
-                      <a href={`tel:${lead.phone}`} className="text-gray-900 dark:text-white dark:text-white hover:text-gray-700">{lead.phone}</a>
+                      <a href={`tel:${lead.phone}`} className="text-gray-900 dark:text-white hover:text-gray-700">{lead.phone}</a>
                     ) : (
                       <span className="text-gray-400 italic">No phone provided</span>
                     )}
@@ -243,15 +244,15 @@ export default function LeadDetails() {
           </div>
 
           {/* Venue Details Section */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
             <div className="px-4 py-5 sm:px-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Venue Details</h3>
+              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Venue Details</h3>
             </div>
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 px-4 py-5 sm:px-6">
+            <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
               <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Venue Name</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex items-center">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Venue Name</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white flex items-center">
                     <MapPin className="h-4 w-4 mr-2 text-gray-400" />
                     {lead.venue_name || 'TBD'}
                   </dd>
@@ -261,26 +262,26 @@ export default function LeadDetails() {
           </div>
 
           {/* Event Details Section */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
             <div className="px-4 py-5 sm:px-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Event Details</h3>
+              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Event Details</h3>
             </div>
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 px-4 py-5 sm:px-6">
+            <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
               <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                 <div className="sm:col-span-1">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Event Type</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{lead.event_type || 'N/A'}</dd>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Event Type</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white">{lead.event_type || 'N/A'}</dd>
                 </div>
                 <div className="sm:col-span-1">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Event Date</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex items-center">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Event Date</dt>
+                  <dd className={`mt-1 text-sm flex items-center ${isPastDate(lead.event_date) ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
                     <Calendar className="h-4 w-4 mr-2 text-gray-400" />
                     {lead.event_date || 'N/A'}
                   </dd>
                 </div>
                 <div className="sm:col-span-1">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Guest Count</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex items-center">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Guest Count</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white flex items-center">
                     <Users className="h-4 w-4 mr-2 text-gray-400" />
                     {lead.guest_count || 'TBD'}
                   </dd>
@@ -290,15 +291,15 @@ export default function LeadDetails() {
           </div>
 
           {/* Services Section */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
             <div className="px-4 py-5 sm:px-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Services</h3>
+              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Services</h3>
             </div>
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 px-4 py-5 sm:px-6">
+            <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
               <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Services Interested</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex flex-wrap gap-2">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Services Interested</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white flex flex-wrap gap-2">
                     {lead.services_interested && lead.services_interested.length > 0 ? (
                       lead.services_interested.map((service, index) => (
                         <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
@@ -316,27 +317,27 @@ export default function LeadDetails() {
           </div>
 
           {/* Other Details Section */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+          <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg">
             <div className="px-4 py-5 sm:px-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white dark:text-white">Other Details</h3>
+              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">Other Details</h3>
             </div>
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 px-4 py-5 sm:px-6">
+            <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-5 sm:px-6">
               <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                 <div className="sm:col-span-1">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Inquiry Date</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white flex items-center">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Inquiry Date</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white flex items-center">
                     <Calendar className="h-4 w-4 mr-2 text-gray-400" />
                     {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : 'N/A'}
                   </dd>
                 </div>
                 <div className="sm:col-span-1">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Lead Source</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white">{lead.lead_source || 'N/A'}</dd>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Lead Source</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-white">{lead.lead_source || 'N/A'}</dd>
                 </div>
                 {lead.notes && (
                   <div className="sm:col-span-2">
-                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Notes</dt>
-                    <dd className="mt-1 text-sm text-gray-900 dark:text-white dark:text-white whitespace-pre-wrap">{lead.notes}</dd>
+                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Notes</dt>
+                    <dd className="mt-1 text-sm text-gray-900 dark:text-white whitespace-pre-wrap">{lead.notes}</dd>
                   </div>
                 )}
               </dl>

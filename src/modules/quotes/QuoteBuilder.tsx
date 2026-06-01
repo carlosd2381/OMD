@@ -10,18 +10,22 @@ import { eventService } from '../../services/eventService';
 import { clientService } from '../../services/clientService';
 import { plannerService } from '../../services/plannerService';
 import { venueService } from '../../services/venueService';
+import { invoiceService } from '../../services/invoiceService';
+import { formatCurrency } from '../../utils/formatters';
 import type { Product } from '../../types/product';
 import type { Template } from '../../types/template';
 import type { QuoteItem } from '../../types/quote';
 import type { Event } from '../../types/event';
 import type { Client } from '../../types/client';
 import toast from 'react-hot-toast';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 import { bookingService } from '../../services/bookingService';
 import { emailNotificationService } from '../../services/emailNotificationService';
 
 export default function QuoteBuilder() {
   const navigate = useNavigate();
+  const { confirm } = useConfirm();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const clientIdParam = searchParams.get('clientId');
@@ -240,12 +244,47 @@ export default function QuoteBuilder() {
 
     let savedQuote;
     if (id) {
-      savedQuote = await quoteService.updateQuote(id, quoteData);
+      const existingQuote = await quoteService.getQuote(id);
+
+      if (existingQuote?.status === 'accepted') {
+        const legacyInvoices = await invoiceService.getInvoicesByQuote(id);
+        const paidCredit = legacyInvoices
+          .filter((invoice) => invoice.status === 'paid')
+          .reduce((sum, invoice) => sum + Number(invoice.total_amount || 0), 0);
+        const unpaidCount = legacyInvoices.filter(
+          (invoice) => invoice.status !== 'paid' && invoice.status !== 'cancelled'
+        ).length;
+
+        const shouldProceed = await confirm({
+          title: 'Create Quote Revision?',
+          message: `This accepted quote will be revised to a new version. ${unpaidCount} unpaid invoice(s) will be cancelled, and ${formatCurrency(paidCredit, 'MXN')} will be applied as credit to the new invoice set. A new contract and invoice schedule will be generated.`,
+          confirmLabel: 'Create Revision',
+          cancelLabel: 'Keep Current',
+          type: 'info',
+        });
+
+        if (!shouldProceed) {
+          throw new Error('QUOTE_REVISION_CANCELLED');
+        }
+
+        savedQuote = await quoteService.createQuoteRevision(id, {
+          ...quoteData,
+          status: 'accepted',
+        });
+
+        await bookingService.regenerateBookingDocumentsForQuoteRevision(id, savedQuote);
+      } else {
+        savedQuote = await quoteService.updateQuote(id, quoteData);
+        await bookingService.generateBookingDocuments(savedQuote);
+      }
     } else {
-      savedQuote = await quoteService.createQuote(quoteData);
+      savedQuote = await quoteService.createQuote({
+        ...quoteData,
+        version: 1,
+      });
+      await bookingService.generateBookingDocuments(savedQuote);
     }
 
-    await bookingService.generateBookingDocuments(savedQuote);
     return savedQuote;
   };
 
@@ -263,24 +302,64 @@ export default function QuoteBuilder() {
       const savedQuote = await saveQuote();
 
       for (const recipient of selectedRecipients) {
-        if (recipient.role.includes('Client')) {
+        const recipientEmail = recipient.email.toLowerCase();
+        const mainClientEmail = client?.email?.toLowerCase() || '';
+        const isClientRecipient = recipient.role.includes('Client') || (mainClientEmail !== '' && recipientEmail === mainClientEmail);
+        let portalSetupLink: string | null = null;
+        let loginEmail = recipient.email;
+
+        if (isClientRecipient) {
+          let portalClientId: string | null = null;
+
           if (!recipient.isCustom && recipient.id) {
-            const clientData = await clientService.getClient(recipient.id);
+            portalClientId = recipient.id;
+          } else if (mainClientEmail !== '' && recipientEmail === mainClientEmail) {
+            portalClientId = savedQuote.client_id;
+          }
+
+          if (portalClientId) {
+            const clientData = await clientService.getClient(portalClientId);
+            if (clientData?.email) {
+              loginEmail = clientData.email;
+            }
+
             if (clientData && !clientData.portal_access) {
-              await clientService.togglePortalAccess(recipient.id, true);
+              await clientService.togglePortalAccess(portalClientId, true);
               console.log(`Enabled portal access for ${recipient.name}`);
+            }
+
+            try {
+              portalSetupLink = await clientService.createPortalSetupLink(portalClientId);
+            } catch (inviteError) {
+              console.warn('Failed to generate portal setup link:', inviteError);
+              toast('Quote sent, but setup link could not be generated. Client can use Forgot password.', { icon: '⚠️' });
             }
           }
         }
 
         console.log(`Sending email to ${recipient.email} (${recipient.role})`);
-        await emailNotificationService.sendManualQuoteEmail(savedQuote, { name: recipient.name, email: recipient.email });
+        await emailNotificationService.sendManualQuoteEmail(
+          savedQuote,
+          { name: recipient.name, email: recipient.email },
+          {
+            isClientRecipient,
+            portalSetupLink,
+            loginEmail,
+          }
+        );
       }
+
+      await quoteService.updateQuoteStatus(savedQuote.id, 'sent', { sendNotification: false });
       
       toast.success(`Quote sent to ${selectedRecipients.length} recipient(s)`, { id: toastId });
+      navigate(`/clients/${clientId}`);
     } catch (error) {
       console.error('Error sending quote:', error);
-      toast.error('Failed to send quote', { id: toastId });
+      if (error instanceof Error && error.message === 'QUOTE_REVISION_CANCELLED') {
+        toast.dismiss(toastId);
+      } else {
+        toast.error('Failed to send quote', { id: toastId });
+      }
     } finally {
       setActionInProgress(null);
     }
@@ -302,6 +381,40 @@ export default function QuoteBuilder() {
 
   const [loading, setLoading] = useState(true);
   const [actionInProgress, setActionInProgress] = useState<'save' | 'send' | null>(null);
+  const [showServiceImportModal, setShowServiceImportModal] = useState(false);
+  const [serviceImportSelection, setServiceImportSelection] = useState<Record<string, boolean>>({});
+  const [autoPromptEventServices, setAutoPromptEventServices] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('quote_builder_auto_prompt_services') === 'true';
+  });
+  const [lastAutoPromptedEventId, setLastAutoPromptedEventId] = useState<string | null>(null);
+
+  const selectedEvent = events.find((event) => event.id === selectedEventId);
+  const selectedEventServices = (selectedEvent?.services || []).filter(
+    (service): service is string => typeof service === 'string' && service.trim().length > 0
+  );
+
+  const normalizeProductName = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  type ServiceMatch = {
+    service: string;
+    product: Product | null;
+    matchType: 'exact' | 'partial' | 'unmatched';
+    alreadyInQuote: boolean;
+  };
+
+  type FinancialExtraConfig = {
+    taxes?: {
+      iva_retenido?: number;
+      isr?: number;
+      isr_retenido?: number;
+    };
+  };
 
   // Load Data
   useEffect(() => {
@@ -368,7 +481,12 @@ export default function QuoteBuilder() {
                 isr: false, 
                 isr_retenido: false 
               };
-              const newTaxRates = { ...taxRates };
+              const newTaxRates = {
+                iva: 16,
+                iva_retenido: 10.66666667,
+                isr: 0,
+                isr_retenido: 10,
+              };
               
               quote.taxes.forEach(t => {
                 if (t.name === 'IVA') { newSelectedTaxes.iva = true; newTaxRates.iva = t.rate; }
@@ -422,10 +540,10 @@ export default function QuoteBuilder() {
           if (financialSettings.quote_sequence_prefix) {
             setQuotePrefix(financialSettings.quote_sequence_prefix);
           }
-          let extraConfig: any = {};
+          let extraConfig: FinancialExtraConfig = {};
           try {
             if (financialSettings.invoice_sequence_prefix && financialSettings.invoice_sequence_prefix.startsWith('{')) {
-              extraConfig = JSON.parse(financialSettings.invoice_sequence_prefix);
+              extraConfig = JSON.parse(financialSettings.invoice_sequence_prefix) as FinancialExtraConfig;
             }
           } catch (e) {
             console.warn('Failed to parse financial settings extra config', e);
@@ -515,8 +633,10 @@ export default function QuoteBuilder() {
               .single()
             );
             if (data) {
-                // Cast data to any to avoid TS error since we are doing a dynamic import/query
-                venueId = (data as any).id;
+              const matchedVenue = data as unknown as { id: string } | null;
+              if (matchedVenue?.id) {
+                venueId = matchedVenue.id;
+              }
             }
         } catch (e) {
             console.warn('Could not find venue by name', e);
@@ -668,15 +788,15 @@ export default function QuoteBuilder() {
       }
       return newItems;
     });
-  }, [discountValue, discountType, subtotalMXN]); // Re-run when subtotal changes to update % discount amount
+  }, [discountValue, discountType, subtotalMXN, discountAmount]); // Re-run when subtotal changes to update % discount amount
 
   // Handlers
-  const handleAddItem = (product: Product) => {
+  const buildQuoteItemFromProduct = (product: Product): QuoteItem => {
     // Determine price based on client type
     const isPreferred = client?.type === 'Preferred Vendor' || client?.lead_source === 'Hotel/Venue PV';
     const unitPrice = isPreferred ? product.price_pv : product.price_direct;
 
-    const newItem: QuoteItem = {
+    return {
       id: Math.random().toString(36).substr(2, 9),
       product_id: product.id,
       description: product.name,
@@ -684,8 +804,13 @@ export default function QuoteBuilder() {
       unit_price: unitPrice,
       cost: product.cost || 0,
       total: unitPrice,
-      is_taxable: true
+      is_taxable: true,
     };
+  };
+
+  const handleAddItem = (product: Product) => {
+    const isPreferred = client?.type === 'Preferred Vendor' || client?.lead_source === 'Hotel/Venue PV';
+    const newItem = buildQuoteItemFromProduct(product);
     setItems(prev => {
         // Ensure we don't duplicate discount item logic here, just append
         // But wait, if we append, we might mess up the order if discount is supposed to be last.
@@ -707,6 +832,152 @@ export default function QuoteBuilder() {
     }
   };
 
+  const getEventServiceMatches = (): ServiceMatch[] => {
+    const normalizedProducts = products.map((product) => ({
+      product,
+      normalizedName: normalizeProductName(product.name),
+    }));
+
+    const existingProductIds = new Set(
+      items
+        .map((item) => item.product_id)
+        .filter((productId): productId is string => typeof productId === 'string' && productId.length > 0)
+    );
+
+    return selectedEventServices.map((service) => {
+      const normalizedService = normalizeProductName(service);
+      const exactMatch = normalizedProducts.find((entry) => entry.normalizedName === normalizedService)?.product;
+
+      if (exactMatch) {
+        return {
+          service,
+          product: exactMatch,
+          matchType: 'exact' as const,
+          alreadyInQuote: existingProductIds.has(exactMatch.id),
+        };
+      }
+
+      const partialMatch = normalizedProducts.find(
+        (entry) =>
+          entry.normalizedName.includes(normalizedService) ||
+          normalizedService.includes(entry.normalizedName)
+      )?.product;
+
+      if (partialMatch) {
+        return {
+          service,
+          product: partialMatch,
+          matchType: 'partial' as const,
+          alreadyInQuote: existingProductIds.has(partialMatch.id),
+        };
+      }
+
+      return {
+        service,
+        product: null,
+        matchType: 'unmatched' as const,
+        alreadyInQuote: false,
+      };
+    });
+  };
+
+  const handleOpenServiceImportModal = () => {
+    if (!selectedEventId) {
+      toast.error('Select an event first');
+      return;
+    }
+
+    if (selectedEventServices.length === 0) {
+      toast.error('No services found on selected event');
+      return;
+    }
+
+    const matches = getEventServiceMatches();
+    const hasAtLeastOneMatch = matches.some((match) => match.product !== null);
+
+    if (!hasAtLeastOneMatch) {
+      toast.error('No matching products found for selected services');
+      return;
+    }
+
+    const nextSelection: Record<string, boolean> = {};
+    matches.forEach((match) => {
+      nextSelection[match.service] = Boolean(match.product && !match.alreadyInQuote);
+    });
+
+    setServiceImportSelection(nextSelection);
+    setShowServiceImportModal(true);
+  };
+
+  const handleApplyEventServices = () => {
+    const matches = getEventServiceMatches();
+
+    const selectedProducts = matches
+      .filter((match) => match.product && !match.alreadyInQuote && serviceImportSelection[match.service])
+      .map((match) => match.product as Product);
+
+    const uniqueProductsToAdd = selectedProducts.filter(
+      (product, index, arr) => arr.findIndex((entry) => entry.id === product.id) === index
+    );
+
+    const addedCount = uniqueProductsToAdd.length;
+    const alreadyPresentCount = matches.filter((match) => match.product && match.alreadyInQuote).length;
+    const unmatchedCount = matches.filter((match) => !match.product).length;
+
+    if (addedCount > 0) {
+      setItems((prev) => [...prev, ...uniqueProductsToAdd.map((product) => buildQuoteItemFromProduct(product))]);
+    }
+
+    if (addedCount > 0) {
+      let message = `Applied ${addedCount} service product${addedCount === 1 ? '' : 's'} from event`;
+      if (alreadyPresentCount > 0) {
+        message += ` (${alreadyPresentCount} already on quote)`;
+      }
+      if (unmatchedCount > 0) {
+        message += ` (${unmatchedCount} unmatched)`;
+      }
+      toast.success(message);
+      setShowServiceImportModal(false);
+      return;
+    }
+
+    if (alreadyPresentCount > 0) {
+      toast('All matched services are already on this quote');
+      return;
+    }
+
+    toast.error('No new products were added');
+  };
+
+  const serviceImportMatches = showServiceImportModal ? getEventServiceMatches() : [];
+  const selectedImportCount = serviceImportMatches.filter(
+    (match) => match.product && !match.alreadyInQuote && serviceImportSelection[match.service]
+  ).length;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('quote_builder_auto_prompt_services', String(autoPromptEventServices));
+  }, [autoPromptEventServices]);
+
+  useEffect(() => {
+    if (!autoPromptEventServices) return;
+    if (loading) return;
+    if (showServiceImportModal) return;
+    if (!selectedEventId) return;
+    if (selectedEventServices.length === 0) return;
+    if (selectedEventId === lastAutoPromptedEventId) return;
+
+    setLastAutoPromptedEventId(selectedEventId);
+    handleOpenServiceImportModal();
+  }, [
+    autoPromptEventServices,
+    loading,
+    showServiceImportModal,
+    selectedEventId,
+    selectedEventServices.length,
+    lastAutoPromptedEventId,
+  ]);
+
   const handleAddCustomItem = () => {
     const newItem: QuoteItem = {
       id: Math.random().toString(36).substr(2, 9),
@@ -720,10 +991,10 @@ export default function QuoteBuilder() {
     setItems(prev => [...prev, newItem]);
   };
 
-  const handleUpdateItem = (id: string, field: keyof QuoteItem, value: any) => {
+  const handleUpdateItem = <K extends keyof QuoteItem>(id: string, field: K, value: QuoteItem[K]) => {
     setItems(items.map(item => {
       if (item.id === id) {
-        const updated = { ...item, [field]: value };
+        const updated: QuoteItem = { ...item, [field]: value };
         if (field === 'quantity' || field === 'unit_price') {
           updated.total = updated.quantity * updated.unit_price;
         }
@@ -765,6 +1036,7 @@ export default function QuoteBuilder() {
             id: id || 'DRAFT',
             client_id: clientId,
             event_id: selectedEventId,
+            version: 1,
             items,
             currency,
             exchange_rate: exchangeRate,
@@ -802,7 +1074,9 @@ export default function QuoteBuilder() {
       navigate(`/clients/${clientId}`);
     } catch (error) {
       console.error('Error saving quote:', error);
-      toast.error('Failed to save quote');
+      if (!(error instanceof Error && error.message === 'QUOTE_REVISION_CANCELLED')) {
+        toast.error('Failed to save quote');
+      }
     } finally {
       setActionInProgress(null);
     }
@@ -811,26 +1085,26 @@ export default function QuoteBuilder() {
   if (loading) return <div className="p-8 text-center">Loading Builder...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 pb-12">
-      <header className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-700 pb-12">
+      <header className="bg-white dark:bg-gray-800 shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center">
-            <button onClick={() => navigate(-1)} className="mr-4 text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700">
+            <button onClick={() => navigate(-1)} className="mr-4 text-gray-500 dark:text-gray-400 hover:text-gray-700">
               <ArrowLeft className="h-6 w-6" />
             </button>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Quote Generator</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quote Generator</h1>
           </div>
           <div className="flex space-x-3">
             <button 
               onClick={handlePrint}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700"
             >
               <Printer className="h-4 w-4 mr-2" /> Print / PDF
             </button>
             <button 
               onClick={handleSave}
               disabled={actionInProgress !== null}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 disabled:opacity-60"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 disabled:opacity-60"
             >
               {actionInProgress === 'save' ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -859,27 +1133,27 @@ export default function QuoteBuilder() {
         <div className="space-y-8">
           
           {/* Top Section: Quote Items (Full Width) */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Line Items</h3>
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Line Items</h3>
             </div>
             <div className="p-6">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead>
                     <tr>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider w-10"></th>
-                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider w-1/3">Description</th>
-                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Qty</th>
-                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">COG (MXN)</th>
-                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Price (MXN)</th>
-                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Total (MXN)</th>
-                      <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Taxable</th>
-                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Profit</th>
-                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider"></th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-10"></th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/3">Description</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Qty</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">COG (MXN)</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Price (MXN)</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total (MXN)</th>
+                      <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Taxable</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Profit</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"></th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white dark:bg-gray-800 dark:bg-gray-800 divide-y divide-gray-200">
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200">
                     {items.map((item, index) => (
                       <tr key={item.id}>
                         <td className="px-2 py-4">
@@ -933,7 +1207,7 @@ export default function QuoteBuilder() {
                             className="block w-32 ml-auto border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm text-right"
                           />
                         </td>
-                        <td className="px-3 py-4 text-right text-sm text-gray-900 dark:text-white dark:text-white font-medium">
+                        <td className="px-3 py-4 text-right text-sm text-gray-900 dark:text-white font-medium">
                           ${item.total.toLocaleString()}
                         </td>
                         <td className="px-3 py-4 text-center">
@@ -958,14 +1232,14 @@ export default function QuoteBuilder() {
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+                  <tfoot className="bg-gray-50 dark:bg-gray-700">
                     <tr>
-                      <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-900 dark:text-white dark:text-white">Items Total:</td>
-                      <td className="px-3 py-2 text-right text-sm text-gray-900 dark:text-white dark:text-white">${(subtotalMXN + discountAmount).toLocaleString()}</td>
+                      <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-900 dark:text-white">Items Total:</td>
+                      <td className="px-3 py-2 text-right text-sm text-gray-900 dark:text-white">${(subtotalMXN + discountAmount).toLocaleString()}</td>
                       <td colSpan={3}></td>
                     </tr>
                     <tr>
-                      <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-900 dark:text-white dark:text-white">
+                      <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-900 dark:text-white">
                         <div className="flex items-center justify-end space-x-2">
                           <span>Discount:</span>
                           <select
@@ -990,47 +1264,47 @@ export default function QuoteBuilder() {
                       <td colSpan={3}></td>
                     </tr>
                     <tr>
-                      <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-900 dark:text-white dark:text-white">Subtotal:</td>
-                      <td className="px-3 py-2 text-right text-sm font-bold text-gray-900 dark:text-white dark:text-white">${subtotalMXN.toLocaleString()}</td>
+                      <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-900 dark:text-white">Subtotal:</td>
+                      <td className="px-3 py-2 text-right text-sm font-bold text-gray-900 dark:text-white">${subtotalMXN.toLocaleString()}</td>
                       <td colSpan={3}></td>
                     </tr>
                     {selectedTaxes.iva && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">IVA ({taxRates.iva}%):</td>
-                        <td className="px-3 py-2 text-right text-sm text-gray-900 dark:text-white dark:text-white">+${ivaAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-500 dark:text-gray-400">IVA ({taxRates.iva}%):</td>
+                        <td className="px-3 py-2 text-right text-sm text-gray-900 dark:text-white">+${ivaAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td colSpan={3}></td>
                       </tr>
                     )}
                     {selectedTaxes.iva_retenido && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">IVA Retenido ({taxRates.iva_retenido.toFixed(2)}%):</td>
+                        <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-500 dark:text-gray-400">IVA Retenido ({taxRates.iva_retenido.toFixed(2)}%):</td>
                         <td className="px-3 py-2 text-right text-sm text-red-600">-${ivaRetAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td colSpan={3}></td>
                       </tr>
                     )}
                     {selectedTaxes.isr && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">ISR ({taxRates.isr}%):</td>
-                        <td className="px-3 py-2 text-right text-sm text-gray-900 dark:text-white dark:text-white">+${isrAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-500 dark:text-gray-400">ISR ({taxRates.isr}%):</td>
+                        <td className="px-3 py-2 text-right text-sm text-gray-900 dark:text-white">+${isrAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td colSpan={3}></td>
                       </tr>
                     )}
                     {selectedTaxes.isr_retenido && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">ISR Retenido ({taxRates.isr_retenido}%):</td>
+                        <td colSpan={5} className="px-6 py-2 text-right text-sm font-medium text-gray-500 dark:text-gray-400">ISR Retenido ({taxRates.isr_retenido}%):</td>
                         <td className="px-3 py-2 text-right text-sm text-red-600">-${isrRetAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td colSpan={3}></td>
                       </tr>
                     )}
-                    <tr className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700">
-                      <td colSpan={5} className="px-6 py-4 text-right text-base font-bold text-gray-900 dark:text-white dark:text-white">Total (MXN):</td>
-                      <td className="px-3 py-4 text-right text-base font-bold text-gray-900 dark:text-white dark:text-white">${totalMXN.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <tr className="border-t border-gray-200 dark:border-gray-700">
+                      <td colSpan={5} className="px-6 py-4 text-right text-base font-bold text-gray-900 dark:text-white">Total (MXN):</td>
+                      <td className="px-3 py-4 text-right text-base font-bold text-gray-900 dark:text-white">${totalMXN.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td colSpan={3}></td>
                     </tr>
                     {currency !== 'MXN' && (
                       <tr>
-                        <td colSpan={5} className="px-6 py-4 text-right text-sm font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400">Total ({currency}):</td>
-                        <td className="px-3 py-4 text-right text-sm font-bold text-gray-900 dark:text-white dark:text-white">
+                        <td colSpan={5} className="px-6 py-4 text-right text-sm font-medium text-gray-500 dark:text-gray-400">Total ({currency}):</td>
+                        <td className="px-3 py-4 text-right text-sm font-bold text-gray-900 dark:text-white">
                           {totalForeign.toLocaleString(undefined, { style: 'currency', currency: currency })}
                         </td>
                         <td colSpan={3}></td>
@@ -1042,7 +1316,7 @@ export default function QuoteBuilder() {
               <div className="mt-4">
                 <button
                   onClick={handleAddCustomItem}
-                  className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                  className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Add Custom Item
@@ -1055,18 +1329,44 @@ export default function QuoteBuilder() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             
             {/* Column 1: Add Products */}
-            <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4">Add Products</h3>
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Add Products</h3>
+                <div className="flex flex-col items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenServiceImportModal}
+                    disabled={!selectedEventId || selectedEventServices.length === 0}
+                    className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Apply Event Services
+                  </button>
+                  <label className="flex items-center gap-2 text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={autoPromptEventServices}
+                      onChange={(e) => setAutoPromptEventServices(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    Auto-prompt on event change
+                  </label>
+                </div>
+              </div>
+              {selectedEventServices.length > 0 && (
+                <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+                  Event has {selectedEventServices.length} selected service{selectedEventServices.length === 1 ? '' : 's'}.
+                </p>
+              )}
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {products.map(product => (
                   <button
                     key={product.id}
                     onClick={() => handleAddItem(product)}
-                    className="w-full text-left px-4 py-3 border border-gray-200 dark:border-gray-700 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 flex justify-between items-center group"
+                    className="w-full text-left px-4 py-3 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:bg-gray-700 flex justify-between items-center group"
                   >
                     <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white dark:text-white">{product.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">${product.price_direct.toLocaleString()} MXN</p>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{product.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">${product.price_direct.toLocaleString()} MXN</p>
                     </div>
                     <Plus className="h-5 w-5 text-gray-400 group-hover:text-primary/80" />
                   </button>
@@ -1075,8 +1375,8 @@ export default function QuoteBuilder() {
             </div>
 
             {/* Column 2: Templates */}
-            <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow rounded-lg p-6 space-y-4">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Configuration</h3>
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 space-y-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Configuration</h3>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700">Event</label>
@@ -1096,7 +1396,7 @@ export default function QuoteBuilder() {
               </div>
 
               {/* Recipients Section */}
-              <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-4">
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                 <div className="flex justify-between items-center mb-2">
                   <label className="block text-sm font-medium text-gray-700">Recipients</label>
                   <button
@@ -1126,19 +1426,19 @@ export default function QuoteBuilder() {
                       </div>
                       <div className="ml-3 text-sm">
                         <label htmlFor={`recipient-${recipient.id}`} className="font-medium text-gray-700">
-                          {recipient.name} <span className="text-gray-500 dark:text-gray-400 dark:text-gray-400 font-normal">({recipient.role})</span>
+                          {recipient.name} <span className="text-gray-500 dark:text-gray-400 font-normal">({recipient.role})</span>
                         </label>
-                        <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400 text-xs">{recipient.email}</p>
+                        <p className="text-gray-500 dark:text-gray-400 text-xs">{recipient.email}</p>
                       </div>
                     </div>
                   ))}
                   {recipients.length === 0 && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 italic">Select an event to load recipients.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 italic">Select an event to load recipients.</p>
                   )}
                 </div>
 
                 {showAddRecipient && (
-                  <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 p-3 rounded-md space-y-2 border border-gray-200 dark:border-gray-700 dark:border-gray-700">
+                  <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-md space-y-2 border border-gray-200 dark:border-gray-700">
                     <input
                       type="text"
                       placeholder="Name"
@@ -1156,7 +1456,7 @@ export default function QuoteBuilder() {
                     <div className="flex justify-end space-x-2">
                       <button
                         onClick={() => setShowAddRecipient(false)}
-                        className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700"
+                        className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700"
                       >
                         Cancel
                       </button>
@@ -1216,8 +1516,8 @@ export default function QuoteBuilder() {
             </div>
 
             {/* Column 3: Currency */}
-            <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4">Currency & Taxes</h3>
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Currency & Taxes</h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
@@ -1256,7 +1556,7 @@ export default function QuoteBuilder() {
                   )}
                 </div>
 
-                <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-4">
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Tax Configuration</label>
                   <div className="space-y-2">
                     <label className="flex items-center">
@@ -1266,7 +1566,7 @@ export default function QuoteBuilder() {
                         onChange={(e) => setSelectedTaxes({ ...selectedTaxes, iva: e.target.checked })}
                         className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                       />
-                      <span className="ml-2 text-sm text-gray-900 dark:text-white dark:text-white">IVA ({taxRates.iva}%)</span>
+                      <span className="ml-2 text-sm text-gray-900 dark:text-white">IVA ({taxRates.iva}%)</span>
                     </label>
                     <label className="flex items-center">
                       <input
@@ -1275,7 +1575,7 @@ export default function QuoteBuilder() {
                         onChange={(e) => setSelectedTaxes({ ...selectedTaxes, iva_retenido: e.target.checked })}
                         className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                       />
-                      <span className="ml-2 text-sm text-gray-900 dark:text-white dark:text-white">IVA Retenido ({taxRates.iva_retenido.toFixed(2)}%)</span>
+                      <span className="ml-2 text-sm text-gray-900 dark:text-white">IVA Retenido ({taxRates.iva_retenido.toFixed(2)}%)</span>
                     </label>
                     <label className="flex items-center">
                       <input
@@ -1284,7 +1584,7 @@ export default function QuoteBuilder() {
                         onChange={(e) => setSelectedTaxes({ ...selectedTaxes, isr: e.target.checked })}
                         className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                       />
-                      <span className="ml-2 text-sm text-gray-900 dark:text-white dark:text-white">ISR ({taxRates.isr}%)</span>
+                      <span className="ml-2 text-sm text-gray-900 dark:text-white">ISR ({taxRates.isr}%)</span>
                     </label>
                     <label className="flex items-center">
                       <input
@@ -1293,7 +1593,7 @@ export default function QuoteBuilder() {
                         onChange={(e) => setSelectedTaxes({ ...selectedTaxes, isr_retenido: e.target.checked })}
                         className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
                       />
-                      <span className="ml-2 text-sm text-gray-900 dark:text-white dark:text-white">ISR Retenido ({taxRates.isr_retenido}%)</span>
+                      <span className="ml-2 text-sm text-gray-900 dark:text-white">ISR Retenido ({taxRates.isr_retenido}%)</span>
                     </label>
                   </div>
                 </div>
@@ -1301,6 +1601,102 @@ export default function QuoteBuilder() {
             </div>
 
           </div>
+
+          {showServiceImportModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+                <h3 className="text-lg font-semibold text-gray-900">Apply Event Services</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  Select which matched services to add as quote items.
+                </p>
+
+                <div className="mt-4 max-h-80 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
+                  {serviceImportMatches.map((match) => (
+                    <div key={match.service} className="flex items-start justify-between gap-3 rounded-md border border-gray-100 p-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{match.service}</p>
+                        {!match.product && (
+                          <p className="text-xs text-red-600">No matching product found</p>
+                        )}
+                        {match.product && match.matchType === 'exact' && (
+                          <p className="text-xs text-gray-500">Match: {match.product.name}</p>
+                        )}
+                        {match.product && match.matchType === 'partial' && (
+                          <p className="text-xs text-amber-600">Partial match: {match.product.name}</p>
+                        )}
+                        {match.product && match.alreadyInQuote && (
+                          <p className="text-xs text-gray-500">Already in quote</p>
+                        )}
+                      </div>
+
+                      <input
+                        type="checkbox"
+                        checked={Boolean(serviceImportSelection[match.service])}
+                        onChange={(e) =>
+                          setServiceImportSelection((prev) => ({
+                            ...prev,
+                            [match.service]: e.target.checked,
+                          }))
+                        }
+                        disabled={!match.product || match.alreadyInQuote}
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary disabled:opacity-50"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between text-xs">
+                  <div className="space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextSelection: Record<string, boolean> = {};
+                        serviceImportMatches.forEach((match) => {
+                          nextSelection[match.service] = Boolean(match.product && !match.alreadyInQuote);
+                        });
+                        setServiceImportSelection(nextSelection);
+                      }}
+                      className="text-primary hover:underline"
+                    >
+                      Select all addable
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextSelection: Record<string, boolean> = {};
+                        serviceImportMatches.forEach((match) => {
+                          nextSelection[match.service] = false;
+                        });
+                        setServiceImportSelection(nextSelection);
+                      }}
+                      className="text-gray-600 hover:underline"
+                    >
+                      Clear selection
+                    </button>
+                  </div>
+                  <span className="text-gray-500">{selectedImportCount} selected</span>
+                </div>
+
+                <div className="mt-5 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowServiceImportModal(false)}
+                    className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApplyEventServices}
+                    disabled={selectedImportCount === 0}
+                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Apply Selected
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

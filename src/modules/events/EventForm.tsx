@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { eventService } from '../../services/eventService';
@@ -29,14 +29,6 @@ export default function EventForm() {
     notes: ''
   });
 
-  useEffect(() => {
-    loadClients();
-    loadVenues();
-    if (isEditing && id) {
-      loadEvent(id);
-    }
-  }, [isEditing, id]);
-
   const loadClients = async () => {
     try {
       const data = await clientService.getClients();
@@ -57,7 +49,7 @@ export default function EventForm() {
     }
   };
 
-  const loadEvent = async (eventId: string) => {
+  const loadEvent = useCallback(async (eventId: string) => {
     try {
       setLoading(true);
       const data = await eventService.getEvent(eventId);
@@ -70,7 +62,15 @@ export default function EventForm() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    loadClients();
+    loadVenues();
+    if (isEditing && id) {
+      loadEvent(id);
+    }
+  }, [isEditing, id, loadEvent]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,11 +78,11 @@ export default function EventForm() {
       setLoading(true);
       
       // Sanitize form data
-      const payload: any = { ...formData };
+      const payload: Partial<Event> = { ...formData };
       
       // Convert empty strings to null for foreign keys
-      payload.venue_id = payload.venue_id || null;
-      payload.secondary_client_id = payload.secondary_client_id || null;
+      payload.venue_id = payload.venue_id || undefined;
+      payload.secondary_client_id = payload.secondary_client_id || undefined;
 
       // Remove system fields that shouldn't be sent to the API
       delete payload.id;
@@ -93,7 +93,7 @@ export default function EventForm() {
         await eventService.updateEvent(id, payload);
         toast.success('Event updated successfully');
       } else {
-        await eventService.createEvent(payload as any);
+        await eventService.createEvent(payload as Omit<Event, 'id' | 'created_at' | 'updated_at'>);
         toast.success('Event created successfully');
       }
       navigate('/events');
@@ -118,18 +118,18 @@ export default function EventForm() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link to="/events" className="text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700">
+          <Link to="/events" className="text-gray-500 dark:text-gray-400 hover:text-gray-700">
             <ArrowLeft className="h-6 w-6" />
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             {isEditing ? 'Edit Event' : 'New Event'}
           </h1>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8 divide-y divide-gray-200 bg-white dark:bg-gray-800 dark:bg-gray-800 p-6 shadow rounded-lg">
+      <form onSubmit={handleSubmit} className="space-y-8 divide-y divide-gray-200 bg-white dark:bg-gray-800 p-6 shadow rounded-lg">
         <div className="space-y-6 sm:space-y-5">
-          <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 dark:border-gray-700 sm:pt-5">
+          <div className="sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 sm:pt-5">
             <label htmlFor="name" className="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2">
               Event Name
             </label>
@@ -146,7 +146,7 @@ export default function EventForm() {
             </div>
           </div>
 
-          <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 dark:border-gray-700 sm:pt-5">
+          <div className="sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 sm:pt-5">
             <label htmlFor="client_id" className="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2">
               Primary Client
             </label>
@@ -169,7 +169,7 @@ export default function EventForm() {
             </div>
           </div>
 
-          <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 dark:border-gray-700 sm:pt-5">
+          <div className="sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 sm:pt-5">
             <label htmlFor="secondary_client_id" className="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2">
               Secondary Client (Optional)
             </label>
@@ -191,7 +191,7 @@ export default function EventForm() {
             </div>
           </div>
 
-          <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 dark:border-gray-700 sm:pt-5">
+          <div className="sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 sm:pt-5">
             <label htmlFor="venue_id" className="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2">
               Venue
             </label>
@@ -213,7 +213,7 @@ export default function EventForm() {
             </div>
           </div>
 
-          <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 dark:border-gray-700 sm:pt-5">
+          <div className="sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 sm:pt-5">
             <label htmlFor="date" className="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2">
               Date
             </label>
@@ -230,7 +230,7 @@ export default function EventForm() {
             </div>
           </div>
 
-          <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 dark:border-gray-700 sm:pt-5">
+          <div className="sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 sm:pt-5">
             <label htmlFor="status" className="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2">
               Status
             </label>
@@ -250,7 +250,7 @@ export default function EventForm() {
             </div>
           </div>
 
-          <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 dark:border-gray-700 sm:pt-5">
+          <div className="sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 sm:pt-5">
             <label htmlFor="guest_count" className="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2">
               Guest Count
             </label>
@@ -266,7 +266,7 @@ export default function EventForm() {
             </div>
           </div>
 
-          <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 dark:border-gray-700 sm:pt-5">
+          <div className="sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 sm:pt-5">
             <label htmlFor="budget" className="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2">
               Budget
             </label>
@@ -282,7 +282,7 @@ export default function EventForm() {
             </div>
           </div>
 
-          <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 dark:border-gray-700 sm:pt-5">
+          <div className="sm:grid-cols-3 sm:gap-4 sm:items-start sm:border-t sm:border-gray-200 dark:border-gray-700 sm:pt-5">
             <label htmlFor="notes" className="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2">
               Notes
             </label>
@@ -303,7 +303,7 @@ export default function EventForm() {
           <div className="flex justify-end">
             <Link
               to="/events"
-              className="bg-white dark:bg-gray-800 dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+              className="bg-white dark:bg-gray-800 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
             >
               Cancel
             </Link>

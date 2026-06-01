@@ -30,7 +30,7 @@ export const templateService = {
       .order('name', { ascending: true });
 
     if (type) {
-      query = query.eq('type', type as any);
+      query = query.eq('type', type as TemplateRow['type']);
     }
 
     const { data, error } = await query;
@@ -42,7 +42,7 @@ export const templateService = {
   createTemplate: async (template: Omit<Template, 'id' | 'lastModified'>): Promise<Template> => {
     const insertData: TemplateInsert = {
       name: template.name,
-      type: template.type as any,
+      type: template.type as TemplateInsert['type'],
       subject: template.subject,
       content: template.type !== 'questionnaire' ? template.content : null,
       questions: template.type === 'questionnaire' ? JSON.parse(template.content) : null,
@@ -65,7 +65,7 @@ export const templateService = {
     };
 
     if (template.name) updateData.name = template.name;
-    if (template.type) updateData.type = template.type as any;
+    if (template.type) updateData.type = template.type as TemplateUpdate['type'];
     if (template.subject !== undefined) updateData.subject = template.subject;
     
     if (template.content !== undefined) {

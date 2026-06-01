@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Mail, RefreshCw, Search, PenSquare } from 'lucide-react';
 import { emailService } from '../../services/emailService';
 import { conversationService, type ConversationThread } from '../../services/conversationService';
@@ -32,11 +32,7 @@ export default function MessagesPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
 
-  useEffect(() => {
-    loadConversations();
-  }, []);
-
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     setLoading(true);
     try {
       const data = await conversationService.getInboxConversations(100);
@@ -53,7 +49,11 @@ export default function MessagesPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [selectedThread?.conversation.id]);
+
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

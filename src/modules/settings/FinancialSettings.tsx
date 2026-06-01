@@ -4,12 +4,38 @@ import { ArrowLeft, DollarSign, FileText, Building2, Calculator } from 'lucide-r
 import toast from 'react-hot-toast';
 import { settingsService } from '../../services/settingsService';
 
+type SupportedCurrency = 'MXN' | 'USD' | 'CAD' | 'EUR' | 'GBP';
+
+type FinancialExtraConfig = {
+  taxes?: {
+    iva_retenido?: number;
+    isr?: number;
+    isr_retenido?: number;
+  };
+  prefixes?: {
+    invoice?: string;
+    quote?: string;
+    contract?: string;
+    questionnaire?: string;
+  };
+  fiscalYear?: {
+    startMonth: string;
+    endMonth: string;
+  };
+  companyDetails?: {
+    legalName: string;
+    taxId: string;
+    address: string;
+    email: string;
+  };
+};
+
 export default function FinancialSettings() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
   const [settings, setSettings] = useState({
-    currency: 'MXN',
+    currency: 'MXN' as SupportedCurrency,
     taxes: {
       iva: 16,
       iva_retenido: 0,
@@ -42,10 +68,10 @@ export default function FinancialSettings() {
     try {
       const data = await settingsService.getFinancialSettings();
       if (data) {
-        let extraConfig: any = {};
+        let extraConfig: FinancialExtraConfig = {};
         try {
           if (data.invoice_sequence_prefix && data.invoice_sequence_prefix.startsWith('{')) {
-            extraConfig = JSON.parse(data.invoice_sequence_prefix);
+            extraConfig = JSON.parse(data.invoice_sequence_prefix) as FinancialExtraConfig;
           } else if (data.invoice_sequence_prefix) {
              // Legacy or simple string support
              extraConfig = { prefixes: { invoice: data.invoice_sequence_prefix } };
@@ -90,7 +116,7 @@ export default function FinancialSettings() {
       });
 
       await settingsService.updateFinancialSettings({
-        currency: settings.currency as any,
+        currency: settings.currency,
         tax_rate: settings.taxes.iva,
         invoice_sequence_prefix: packedConfig,
       });
@@ -111,11 +137,11 @@ export default function FinancialSettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Financial Settings</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Manage currency, taxes, and billing details.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Financial Settings</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Manage currency, taxes, and billing details.</p>
           </div>
         </div>
         <button
@@ -133,8 +159,8 @@ export default function FinancialSettings() {
         <div className="space-y-6">
           
           {/* Currency & Fiscal Year */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+          <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
               <DollarSign className="h-5 w-5 mr-2 text-gray-400" />
               General Financials
             </h3>
@@ -143,7 +169,7 @@ export default function FinancialSettings() {
                 <label className="block text-sm font-medium text-gray-700">Base Currency</label>
                 <select
                   value={settings.currency}
-                  onChange={(e) => setSettings({ ...settings, currency: e.target.value })}
+                  onChange={(e) => setSettings({ ...settings, currency: e.target.value as SupportedCurrency })}
                   className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
                 >
                   <option value="MXN">Mexican Peso (MXN)</option>
@@ -151,7 +177,7 @@ export default function FinancialSettings() {
                   <option value="CAD">Canadian Dollar (CAD)</option>
                   <option value="EUR">Euro (EUR)</option>
                 </select>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Default currency for reporting and new quotes.</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Default currency for reporting and new quotes.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -190,8 +216,8 @@ export default function FinancialSettings() {
           </div>
 
           {/* Tax Settings */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+          <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
               <Calculator className="h-5 w-5 mr-2 text-gray-400" />
               Tax Configuration (%)
             </h3>
@@ -212,7 +238,7 @@ export default function FinancialSettings() {
                     className="focus:ring-primary focus:border-primary block w-full pr-8 sm:text-sm border-gray-300 rounded-md"
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">%</span>
+                    <span className="text-gray-500 dark:text-gray-400 sm:text-sm">%</span>
                   </div>
                 </div>
               </div>
@@ -232,7 +258,7 @@ export default function FinancialSettings() {
                     className="focus:ring-primary focus:border-primary block w-full pr-8 sm:text-sm border-gray-300 rounded-md"
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">%</span>
+                    <span className="text-gray-500 dark:text-gray-400 sm:text-sm">%</span>
                   </div>
                 </div>
               </div>
@@ -252,7 +278,7 @@ export default function FinancialSettings() {
                     className="focus:ring-primary focus:border-primary block w-full pr-8 sm:text-sm border-gray-300 rounded-md"
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">%</span>
+                    <span className="text-gray-500 dark:text-gray-400 sm:text-sm">%</span>
                   </div>
                 </div>
               </div>
@@ -272,7 +298,7 @@ export default function FinancialSettings() {
                     className="focus:ring-primary focus:border-primary block w-full pr-8 sm:text-sm border-gray-300 rounded-md"
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">%</span>
+                    <span className="text-gray-500 dark:text-gray-400 sm:text-sm">%</span>
                   </div>
                 </div>
               </div>
@@ -285,12 +311,12 @@ export default function FinancialSettings() {
         <div className="space-y-6">
 
           {/* Document Sequencing */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+          <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
               <FileText className="h-5 w-5 mr-2 text-gray-400" />
               Document Sequencing
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
               Documents follow the format: <span className="font-mono bg-gray-100 px-1 rounded">PREFIX-YYMMDD-EVENT#-DOC#</span>
             </p>
             <div className="grid grid-cols-2 gap-4">
@@ -343,9 +369,9 @@ export default function FinancialSettings() {
                 />
               </div>
             </div>
-            <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 rounded-md">
-              <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">Example Invoice ID:</p>
-              <p className="text-sm font-mono font-medium text-gray-900 dark:text-white dark:text-white mt-1">
+            <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-md">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Example Invoice ID:</p>
+              <p className="text-sm font-mono font-medium text-gray-900 dark:text-white mt-1">
                 {settings.prefixes.invoice}-260302-02-01
               </p>
               <p className="text-xs text-gray-400 mt-2">
@@ -355,8 +381,8 @@ export default function FinancialSettings() {
           </div>
 
           {/* Company Billing Details */}
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4 flex items-center">
+          <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4 flex items-center">
               <Building2 className="h-5 w-5 mr-2 text-gray-400" />
               Company Billing Details
             </h3>

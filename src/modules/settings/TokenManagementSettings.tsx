@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Search, Copy, Trash2, Edit2, Play, Settings, Database, Tag, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { settingsService } from '../../services/settingsService';
+import { settingsService, type Token as DbToken } from '../../services/settingsService';
 import { SYSTEM_TOKENS as SHARED_SYSTEM_TOKENS } from '../../constants/tokens';
 
 type TokenType = 'system' | 'custom';
@@ -142,12 +142,13 @@ export default function TokenManagementSettings() {
 
     try {
         if (editingToken && editingToken.id) {
-            const updated = await settingsService.updateToken(editingToken.id, {
+          const updatePayload: Partial<DbToken> = {
                 key,
                 default_value: modalValue, // Map value to default_value
                 label: modalDesc, // Map description to label
                 category: modalCategory
-            } as any);
+          };
+          const updated = await settingsService.updateToken(editingToken.id, updatePayload);
             setCustomTokens(customTokens.map(t => t.id === updated.id ? {
                 ...t,
                 key: updated.key,
@@ -161,12 +162,13 @@ export default function TokenManagementSettings() {
                 toast.error('Token key already exists');
                 return;
             }
-            const created = await settingsService.createToken({
+            const createPayload: Partial<DbToken> = {
                 key,
                 default_value: modalValue, // Map value to default_value
                 label: modalDesc, // Map description to label
                 category: modalCategory
-            } as any);
+            };
+            const created = await settingsService.createToken(createPayload);
             setCustomTokens([...customTokens, {
                 id: created.id,
                 key: created.key,
@@ -224,11 +226,11 @@ export default function TokenManagementSettings() {
             onClick={() => navigate('/settings')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400 dark:text-gray-400" />
+            <ArrowLeft className="h-6 w-6 text-gray-500 dark:text-gray-400" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white dark:text-white">Token Management</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Manage merge tags and shortcodes for your templates.</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Token Management</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Manage merge tags and shortcodes for your templates.</p>
           </div>
         </div>
         {activeTab === 'custom' && (
@@ -243,14 +245,14 @@ export default function TokenManagementSettings() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 dark:border-gray-700">
+      <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('library')}
             className={`${
               activeTab === 'library'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Database className="h-4 w-4 mr-2" />
@@ -261,7 +263,7 @@ export default function TokenManagementSettings() {
             className={`${
               activeTab === 'custom'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Tag className="h-4 w-4 mr-2" />
@@ -272,7 +274,7 @@ export default function TokenManagementSettings() {
             className={`${
               activeTab === 'settings'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Settings className="h-4 w-4 mr-2" />
@@ -283,7 +285,7 @@ export default function TokenManagementSettings() {
             className={`${
               activeTab === 'tester'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 dark:text-gray-400 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
           >
             <Play className="h-4 w-4 mr-2" />
@@ -293,7 +295,7 @@ export default function TokenManagementSettings() {
       </div>
 
       {/* Content */}
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow sm:rounded-lg min-h-[400px]">
+      <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg min-h-[400px]">
         
         {/* Library Tab */}
         {activeTab === 'library' && (
@@ -314,22 +316,22 @@ export default function TokenManagementSettings() {
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Token</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Description</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Category</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-400 uppercase tracking-wider">Usage</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Token</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Description</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Category</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Usage</th>
                     <th className="relative px-6 py-3"><span className="sr-only">Copy</span></th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 dark:bg-gray-800 divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200">
                   {allTokens.filter(t => t.type === 'system').map((token) => (
-                    <tr key={token.key} className="hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+                    <tr key={token.key} className="hover:bg-gray-50 dark:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-primary font-medium">
                         {startWrap}{token.key}{endWrap}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {token.description}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -337,7 +339,7 @@ export default function TokenManagementSettings() {
                           {token.category}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {token.usageCount} templates
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -361,7 +363,7 @@ export default function TokenManagementSettings() {
             ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {customTokens.map((token) => (
-                <div key={token.id || token.key} className="relative rounded-lg border border-gray-300 bg-white dark:bg-gray-800 dark:bg-gray-800 px-6 py-5 shadow-sm flex items-center space-x-3 hover:border-primary focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary">
+                <div key={token.id || token.key} className="relative rounded-lg border border-gray-300 bg-white dark:bg-gray-800 px-6 py-5 shadow-sm flex items-center space-x-3 hover:border-primary focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary">
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
                       <p className="text-sm font-medium text-primary font-mono truncate">
@@ -376,8 +378,8 @@ export default function TokenManagementSettings() {
                         </button>
                       </div>
                     </div>
-                    <p className="text-sm text-gray-900 dark:text-white dark:text-white mt-1 truncate">{token.value}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1">{token.description}</p>
+                    <p className="text-sm text-gray-900 dark:text-white mt-1 truncate">{token.value}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{token.description}</p>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                         {token.category}
@@ -392,7 +394,7 @@ export default function TokenManagementSettings() {
                 className="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-12 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
               >
                 <Plus className="mx-auto h-12 w-12 text-gray-400" />
-                <span className="mt-2 block text-sm font-medium text-gray-900 dark:text-white dark:text-white">Create new token</span>
+                <span className="mt-2 block text-sm font-medium text-gray-900 dark:text-white">Create new token</span>
               </button>
             </div>
             )}
@@ -403,35 +405,35 @@ export default function TokenManagementSettings() {
         {activeTab === 'settings' && (
           <div className="p-6 max-w-2xl space-y-8">
             <div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Syntax Configuration</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-4">Choose how tokens are wrapped in your templates.</p>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Syntax Configuration</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Choose how tokens are wrapped in your templates.</p>
               <div className="grid grid-cols-3 gap-4">
                 <button
                   onClick={() => setSyntax('mustache')}
-                  className={`p-4 border rounded-lg text-center ${syntax === 'mustache' ? 'border-primary bg-secondary ring-1 ring-primary' : 'border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700'}`}
+                  className={`p-4 border rounded-lg text-center ${syntax === 'mustache' ? 'border-primary bg-secondary ring-1 ring-primary' : 'border-gray-300 hover:bg-gray-50 dark:bg-gray-700'}`}
                 >
-                  <span className="block text-lg font-mono font-bold text-gray-900 dark:text-white dark:text-white">{'{{token}}'}</span>
-                  <span className="block text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1">Mustache (Default)</span>
+                  <span className="block text-lg font-mono font-bold text-gray-900 dark:text-white">{'{{token}}'}</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">Mustache (Default)</span>
                 </button>
                 <button
                   onClick={() => setSyntax('percent')}
-                  className={`p-4 border rounded-lg text-center ${syntax === 'percent' ? 'border-primary bg-secondary ring-1 ring-primary' : 'border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700'}`}
+                  className={`p-4 border rounded-lg text-center ${syntax === 'percent' ? 'border-primary bg-secondary ring-1 ring-primary' : 'border-gray-300 hover:bg-gray-50 dark:bg-gray-700'}`}
                 >
-                  <span className="block text-lg font-mono font-bold text-gray-900 dark:text-white dark:text-white">%token%</span>
-                  <span className="block text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1">Percent</span>
+                  <span className="block text-lg font-mono font-bold text-gray-900 dark:text-white">%token%</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">Percent</span>
                 </button>
                 <button
                   onClick={() => setSyntax('brackets')}
-                  className={`p-4 border rounded-lg text-center ${syntax === 'brackets' ? 'border-primary bg-secondary ring-1 ring-primary' : 'border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700'}`}
+                  className={`p-4 border rounded-lg text-center ${syntax === 'brackets' ? 'border-primary bg-secondary ring-1 ring-primary' : 'border-gray-300 hover:bg-gray-50 dark:bg-gray-700'}`}
                 >
-                  <span className="block text-lg font-mono font-bold text-gray-900 dark:text-white dark:text-white">[token]</span>
-                  <span className="block text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400 mt-1">Brackets</span>
+                  <span className="block text-lg font-mono font-bold text-gray-900 dark:text-white">[token]</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">Brackets</span>
                 </button>
               </div>
             </div>
 
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-8">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Data Formatting</h3>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Data Formatting</h3>
               <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
                 <div className="sm:col-span-3">
                   <label className="block text-sm font-medium text-gray-700">Date Format</label>
@@ -462,9 +464,9 @@ export default function TokenManagementSettings() {
               </div>
             </div>
 
-            <div className="border-t border-gray-200 dark:border-gray-700 dark:border-gray-700 pt-8">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white">Global Fallback</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400 mb-4">What to display if a token's data source is empty.</p>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Global Fallback</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">What to display if a token's data source is empty.</p>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Default Replacement Text</label>
                 <input
@@ -503,7 +505,7 @@ export default function TokenManagementSettings() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Live Preview</label>
-              <div className="bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 border border-gray-200 dark:border-gray-700 dark:border-gray-700 rounded-md p-4 h-[250px] overflow-y-auto whitespace-pre-wrap">
+              <div className="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-md p-4 h-[250px] overflow-y-auto whitespace-pre-wrap">
                 {testOutput || <span className="text-gray-400 italic">Click 'Render Preview' to see the result...</span>}
               </div>
               <div className="mt-4 bg-blue-50 p-4 rounded-md">
@@ -522,16 +524,16 @@ export default function TokenManagementSettings() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-gray-50 dark:bg-gray-700 dark:bg-gray-7000 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white dark:text-white mb-4">
+        <div className="fixed inset-0 bg-gray-50 dark:bg-gray-7000 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
               {editingToken ? 'Edit Custom Token' : 'Create Custom Token'}
             </h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Token Key</label>
                 <div className="mt-1 flex rounded-md shadow-sm">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 dark:bg-gray-700 dark:bg-gray-700 text-gray-500 dark:text-gray-400 dark:text-gray-400 sm:text-sm">
+                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 sm:text-sm">
                     {startWrap}
                   </span>
                   <input
@@ -580,7 +582,7 @@ export default function TokenManagementSettings() {
             <div className="mt-6 flex justify-end space-x-3">
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700"
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-700"
               >
                 Cancel
               </button>

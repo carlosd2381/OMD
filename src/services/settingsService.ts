@@ -1,6 +1,12 @@
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/supabase';
 
+type UntypedSupabaseClient = {
+  from: (table: string) => ReturnType<typeof supabase.from>;
+};
+
+const untypedSupabase = supabase as unknown as UntypedSupabaseClient;
+
 export type BrandingSettings = Database['public']['Tables']['branding_settings']['Row'] & {
   address?: string;
   website?: string;
@@ -32,6 +38,9 @@ export type SocialIntegration = {
   created_at?: string | null;
   updated_at?: string | null;
 };
+
+type InsertOf<TableName extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][TableName]['Insert'];
 
 export interface DeliverySettings {
   id: string;
@@ -79,7 +88,7 @@ export const settingsService = {
     } else {
       const { data, error } = await supabase
         .from('branding_settings')
-        .insert(settings as any)
+        .insert(settings as unknown as InsertOf<'branding_settings'>)
         .select()
         .single();
       if (error) throw error;
@@ -116,7 +125,7 @@ export const settingsService = {
     } else {
       const { data, error } = await supabase
         .from('calendar_settings')
-        .insert(settings as any)
+        .insert(settings as unknown as InsertOf<'calendar_settings'>)
         .select()
         .single();
       if (error) throw error;
@@ -127,7 +136,7 @@ export const settingsService = {
 
   // Delivery
   getDeliverySettings: async (): Promise<DeliverySettings | null> => {
-    const { data, error } = await (supabase as any)
+    const { data, error } = await untypedSupabase
       .from('delivery_settings')
       .select('*')
       .limit(1)
@@ -142,7 +151,7 @@ export const settingsService = {
     
     let result;
     if (existing) {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await untypedSupabase
         .from('delivery_settings')
         .update(settings)
         .eq('id', existing.id)
@@ -151,7 +160,7 @@ export const settingsService = {
       if (error) throw error;
       result = data;
     } else {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await untypedSupabase
         .from('delivery_settings')
         .insert(settings)
         .select()
@@ -190,7 +199,7 @@ export const settingsService = {
     } else {
       const { data, error } = await supabase
         .from('email_settings')
-        .insert(settings as any)
+        .insert(settings as unknown as InsertOf<'email_settings'>)
         .select()
         .single();
       if (error) throw error;
@@ -227,7 +236,7 @@ export const settingsService = {
     } else {
       const { data, error } = await supabase
         .from('financial_settings')
-        .insert(settings as any)
+        .insert(settings as unknown as InsertOf<'financial_settings'>)
         .select()
         .single();
       if (error) throw error;
@@ -246,7 +255,11 @@ export const settingsService = {
     return data || [];
   },
   createPaymentMethod: async (item: Partial<PaymentMethod>): Promise<PaymentMethod> => {
-    const { data, error } = await supabase.from('payment_methods').insert(item as any).select().single();
+    const { data, error } = await supabase
+      .from('payment_methods')
+      .insert(item as unknown as InsertOf<'payment_methods'>)
+      .select()
+      .single();
     if (error) throw error;
     return data;
   },
@@ -270,7 +283,11 @@ export const settingsService = {
     return data || [];
   },
   createPaymentSchedule: async (item: Partial<PaymentSchedule>): Promise<PaymentSchedule> => {
-    const { data, error } = await supabase.from('payment_schedules').insert(item as any).select().single();
+    const { data, error } = await supabase
+      .from('payment_schedules')
+      .insert(item as unknown as InsertOf<'payment_schedules'>)
+      .select()
+      .single();
     if (error) throw error;
     return data;
   },
@@ -294,7 +311,11 @@ export const settingsService = {
     return data || [];
   },
   createContactForm: async (item: Partial<ContactForm>): Promise<ContactForm> => {
-    const { data, error } = await supabase.from('contact_forms').insert(item as any).select().single();
+    const { data, error } = await supabase
+      .from('contact_forms')
+      .insert(item as unknown as InsertOf<'contact_forms'>)
+      .select()
+      .single();
     if (error) throw error;
     return data;
   },
@@ -318,7 +339,11 @@ export const settingsService = {
     return data || [];
   },
   createExpenseCategory: async (item: Partial<ExpenseCategory>): Promise<ExpenseCategory> => {
-    const { data, error } = await supabase.from('expense_categories').insert(item as any).select().single();
+    const { data, error } = await supabase
+      .from('expense_categories')
+      .insert(item as unknown as InsertOf<'expense_categories'>)
+      .select()
+      .single();
     if (error) throw error;
     return data;
   },
@@ -342,7 +367,11 @@ export const settingsService = {
     return data || [];
   },
   createRole: async (item: Partial<Role>): Promise<Role> => {
-    const { data, error } = await supabase.from('roles').insert(item as any).select().single();
+    const { data, error } = await supabase
+      .from('roles')
+      .insert(item as unknown as InsertOf<'roles'>)
+      .select()
+      .single();
     if (error) throw error;
     return data;
   },
@@ -366,7 +395,11 @@ export const settingsService = {
     return data || [];
   },
   createToken: async (item: Partial<Token>): Promise<Token> => {
-    const { data, error } = await supabase.from('tokens').insert(item as any).select().single();
+    const { data, error } = await supabase
+      .from('tokens')
+      .insert(item as unknown as InsertOf<'tokens'>)
+      .select()
+      .single();
     if (error) throw error;
     return data;
   },
@@ -402,7 +435,7 @@ export const settingsService = {
     } else {
       const { data, error } = await supabase
         .from('social_integrations')
-        .insert(item as any)
+        .insert(item as unknown as InsertOf<'social_integrations'>)
         .select()
         .single();
       if (error) throw error;

@@ -32,9 +32,10 @@ export default function PayrollList() {
       await payrollService.createPayrollRun(date);
       toast.success('Payroll run generated successfully');
       loadRuns();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error generating run:', error);
-      toast.error(error.message || 'Failed to generate run');
+      const message = error instanceof Error ? error.message : 'Failed to generate run';
+      toast.error(message);
     } finally {
       setIsGenerating(false);
     }
@@ -44,13 +45,13 @@ export default function PayrollList() {
     <div className="space-y-6">
       <div className="md:flex md:items-center md:justify-between">
         <div className="min-w-0 flex-1">
-          <h2 className="text-2xl font-bold leading-7 text-gray-900 dark:text-white dark:text-white sm:truncate sm:text-3xl sm:tracking-tight">
+          <h2 className="text-2xl font-bold leading-7 text-gray-900 dark:text-white sm:truncate sm:text-3xl sm:tracking-tight">
             Payroll Management
           </h2>
         </div>
         <div className="mt-4 flex md:ml-4 md:mt-0">
-          <div className="flex items-center space-x-2 bg-white dark:bg-gray-800 dark:bg-gray-800 p-2 rounded-md shadow-sm mr-2">
-            <span className="text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">Week of:</span>
+          <div className="flex items-center space-x-2 bg-white dark:bg-gray-800 p-2 rounded-md shadow-sm mr-2">
+            <span className="text-sm text-gray-500 dark:text-gray-400">Week of:</span>
             <input 
               type="date" 
               value={selectedDate}
@@ -70,16 +71,16 @@ export default function PayrollList() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
         <ul role="list" className="divide-y divide-gray-200">
           {runs.length === 0 ? (
-            <li className="px-4 py-12 text-center text-gray-500 dark:text-gray-400 dark:text-gray-400">
+            <li className="px-4 py-12 text-center text-gray-500 dark:text-gray-400">
               No payroll runs found. Generate one to get started.
             </li>
           ) : (
             runs.map((run) => (
               <li key={run.id}>
-                <Link to={`/payroll/${run.id}`} className="block hover:bg-gray-50 dark:bg-gray-700 dark:bg-gray-700">
+                <Link to={`/payroll/${run.id}`} className="block hover:bg-gray-50 dark:bg-gray-700">
                   <div className="flex items-center px-4 py-4 sm:px-6">
                     <div className="min-w-0 flex-1 sm:flex sm:items-center sm:justify-between">
                       <div className="truncate">
@@ -87,15 +88,15 @@ export default function PayrollList() {
                           <p className="truncate font-medium text-primary">
                             {format(new Date(run.period_start), 'MMM d')} - {format(new Date(run.period_end), 'MMM d, yyyy')}
                           </p>
-                          <p className="ml-1 flex-shrink-0 font-normal text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                          <p className="ml-1 flex-shrink-0 font-normal text-gray-500 dark:text-gray-400">
                             (Paid: {format(new Date(run.payment_date), 'MMM d')})
                           </p>
                         </div>
                         <div className="mt-2 flex">
-                          <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 dark:text-gray-400">
+                          <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                             <DollarSign className="mr-1.5 h-5 w-5 flex-shrink-0 text-gray-400" aria-hidden="true" />
                             <p>
-                              Total: <span className="font-medium text-gray-900 dark:text-white dark:text-white">${run.total_amount.toLocaleString()}</span>
+                              Total: <span className="font-medium text-gray-900 dark:text-white">${run.total_amount.toLocaleString()}</span>
                             </p>
                           </div>
                         </div>

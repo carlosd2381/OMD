@@ -8,12 +8,13 @@ export interface Invoice {
   id: string;
   client_id: string;
   event_id: string;
+  quote_id?: string;
   invoice_number: string;
   items: InvoiceItem[];
   total_amount: number;
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   due_date: string;
-  type: 'retainer' | 'installment' | 'final_balance' | 'standard';
+  type: 'retainer' | 'installment' | 'final_balance' | 'standard' | 'change_order';
   paid_at?: string;
   created_at: string;
   updated_at: string;
