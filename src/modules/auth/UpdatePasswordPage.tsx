@@ -1,13 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
 export default function UpdatePasswordPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  const nextParam = searchParams.get('next');
+  const redirectTarget = nextParam && nextParam.startsWith('/') ? nextParam : '/auth/login';
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +31,7 @@ export default function UpdatePasswordPage() {
       if (error) throw error;
 
       toast.success('Password updated successfully');
-      navigate('/');
+      navigate(redirectTarget, { replace: true });
     } catch (error: unknown) {
       console.error('Error updating password:', error);
       const message = error instanceof Error ? error.message : 'Failed to update password';

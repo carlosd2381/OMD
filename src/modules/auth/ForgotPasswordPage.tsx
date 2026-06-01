@@ -1,12 +1,19 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
 export default function ForgotPasswordPage() {
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
+
+  const nextParam = searchParams.get('next');
+  const safeNext = nextParam && nextParam.startsWith('/') ? nextParam : null;
+  const redirectTo = safeNext
+    ? `${window.location.origin}/auth/update-password?next=${encodeURIComponent(safeNext)}`
+    : `${window.location.origin}/auth/update-password`;
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -14,7 +21,7 @@ export default function ForgotPasswordPage() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/update-password`,
+        redirectTo,
       });
 
       if (error) throw error;

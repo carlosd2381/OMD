@@ -1,13 +1,19 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  const nextParam = searchParams.get('next');
+  const stateFrom = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+  const redirectTarget = nextParam && nextParam.startsWith('/') ? nextParam : stateFrom || '/';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +28,7 @@ export default function LoginPage() {
       if (error) throw error;
 
       toast.success('Welcome back!');
-      navigate('/');
+      navigate(redirectTarget, { replace: true });
     } catch (error: unknown) {
       console.error('Error logging in:', error);
       const message = error instanceof Error ? error.message : 'Failed to login';

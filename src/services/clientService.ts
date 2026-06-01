@@ -174,7 +174,8 @@ export const clientService = {
 
   async createPortalSetupLink(id: string): Promise<string | null> {
     const portalBaseUrl = import.meta.env.VITE_PORTAL_URL || window.location.origin;
-    const redirectTo = `${portalBaseUrl}/auth/update-password`;
+    const nextPath = `/portal/${id}`;
+    const redirectTo = `${portalBaseUrl}/auth/update-password?next=${encodeURIComponent(nextPath)}`;
 
     const { data, error } = await supabase.functions.invoke('invite-client', {
       body: {
