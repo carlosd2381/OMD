@@ -278,7 +278,9 @@ export default function ClientPortal() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      navigate('/auth/login', { state: { from: location }, replace: true });
+      const portalTarget = clientId ? `/portal/${clientId}` : location.pathname;
+      const next = encodeURIComponent(portalTarget);
+      navigate(`/auth/login?next=${next}`, { state: { from: location }, replace: true });
       return;
     }
 
