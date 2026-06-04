@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { FileText, CheckSquare, PenTool, DollarSign, Star, Layout, Lock, Download, ClipboardList, CreditCard, CheckCircle, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react';
+import { FileText, CheckSquare, PenTool, DollarSign, Star, Layout, Lock, Download, ClipboardList, CreditCard, CheckCircle, ArrowRight, ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { portalService } from '../../services/portalService';
 import { questionnaireService } from '../../services/questionnaireService';
@@ -111,6 +111,7 @@ export default function ClientPortal() {
   const [setPasswordValue, setSetPasswordValue] = useState('');
   const [setPasswordConfirm, setSetPasswordConfirm] = useState('');
   const [setPasswordLoading, setSetPasswordLoading] = useState(false);
+  const [setPasswordVisible, setSetPasswordVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1029,15 +1030,26 @@ export default function ClientPortal() {
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="relative">
+                  <input
+                    type={setPasswordVisible ? 'text' : 'password'}
+                    placeholder="New password"
+                    value={setPasswordValue}
+                    onChange={(e) => setSetPasswordValue(e.target.value)}
+                    className="w-full pl-3 pr-9 py-2 text-sm border border-amber-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSetPasswordVisible((v) => !v)}
+                    className="absolute inset-y-0 right-0 flex items-center px-2 text-amber-700 hover:text-amber-900"
+                    aria-label={setPasswordVisible ? 'Hide password' : 'Show password'}
+                    tabIndex={-1}
+                  >
+                    {setPasswordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
                 <input
-                  type="password"
-                  placeholder="New password"
-                  value={setPasswordValue}
-                  onChange={(e) => setSetPasswordValue(e.target.value)}
-                  className="px-3 py-2 text-sm border border-amber-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500"
-                />
-                <input
-                  type="password"
+                  type={setPasswordVisible ? 'text' : 'password'}
                   placeholder="Confirm password"
                   value={setPasswordConfirm}
                   onChange={(e) => setSetPasswordConfirm(e.target.value)}
