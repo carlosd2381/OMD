@@ -35,6 +35,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { userService } from '../../services/userService';
 import { activityLogService } from '../../services/activityLogService';
 import { supabase } from '../../lib/supabase';
+import { emailNotificationService } from '../../services/emailNotificationService';
 
 type PortalTab = 'overview' | 'quotes' | 'questionnaires' | 'contracts' | 'invoices' | 'reviews';
 
@@ -146,6 +147,17 @@ export default function ClientPortal() {
           window.localStorage.setItem(`omd:portal:setPasswordDismissed:${portalClientId}`, 'true');
         } catch {
           // ignore storage failures
+        }
+      }
+      if (client?.email && portalClientId) {
+        try {
+          await emailNotificationService.sendPortalPasswordSetConfirmation({
+            clientId: portalClientId,
+            email: client.email,
+            name: [client.first_name, client.last_name].filter(Boolean).join(' ').trim() || null
+          });
+        } catch (notifyError) {
+          console.warn('Failed to send password confirmation email:', notifyError);
         }
       }
     } catch (error) {

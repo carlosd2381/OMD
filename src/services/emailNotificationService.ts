@@ -399,5 +399,34 @@ export const emailNotificationService = {
       html,
       text: `Your quote total is ${formatCurrency(quote.total_amount, quote.currency)}.`
     }, settings);
+  },
+
+  async sendPortalPasswordSetConfirmation(params: { clientId: string; email: string; name?: string | null }) {
+    const [settings, branding] = await Promise.all([loadEmailSettings(), loadBranding()]);
+    if (!settings) return;
+
+    const brandName = getBrandName(branding);
+    const portalUrl = getClientPortalUrl(params.clientId);
+    const recipientName = params.name?.trim() || 'there';
+
+    const html = buildEmailTemplate({
+      greeting: `Hi ${recipientName},`,
+      intro: `Your password for the ${brandName} client portal has been set successfully. You can now sign in anytime using your email and the password you just created.`,
+      detailRows: [
+        { label: 'Login email', value: params.email },
+        { label: 'Portal URL', value: portalUrl }
+      ],
+      ctaLabel: 'Open Client Portal',
+      ctaUrl: portalUrl,
+      closing: `If you did not set this password, please contact us right away.<br/><br/>Warmly,<br/>${brandName}`,
+      footer: 'This is an automated security notification.'
+    });
+
+    await postEmail({
+      to: params.email,
+      subject: `${brandName} • Your portal password was set`,
+      html,
+      text: `Your password for the ${brandName} client portal has been set. Sign in at ${portalUrl} with ${params.email}.`
+    }, settings);
   }
 };
