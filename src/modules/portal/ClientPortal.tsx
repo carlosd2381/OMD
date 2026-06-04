@@ -113,16 +113,29 @@ export default function ClientPortal() {
   const [setPasswordLoading, setSetPasswordLoading] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     if (!portalClientId) {
       setShowSetPassword(false);
       return;
     }
-    try {
-      const dismissed = window.localStorage.getItem(`omd:portal:setPasswordDismissed:${portalClientId}`) === 'true';
-      setShowSetPassword(!dismissed);
-    } catch {
-      setShowSetPassword(true);
-    }
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        const metaFlag = Boolean(data?.user?.user_metadata?.portal_password_set);
+        if (cancelled) return;
+        if (metaFlag) {
+          setShowSetPassword(false);
+          return;
+        }
+        const dismissed = window.localStorage.getItem(`omd:portal:setPasswordDismissed:${portalClientId}`) === 'true';
+        setShowSetPassword(!dismissed);
+      } catch {
+        if (!cancelled) setShowSetPassword(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [portalClientId]);
 
   const handleSetPortalPassword = async () => {
@@ -136,7 +149,10 @@ export default function ClientPortal() {
     }
     try {
       setSetPasswordLoading(true);
-      const { error } = await supabase.auth.updateUser({ password: setPasswordValue });
+      const { error } = await supabase.auth.updateUser({
+        password: setPasswordValue,
+        data: { portal_password_set: true, portal_password_set_at: new Date().toISOString() }
+      });
       if (error) throw error;
       toast.success('Password set. You can use it next time you sign in.');
       setSetPasswordValue('');
