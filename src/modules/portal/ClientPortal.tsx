@@ -34,6 +34,7 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { userService } from '../../services/userService';
 import { activityLogService } from '../../services/activityLogService';
+import { supabase } from '../../lib/supabase';
 
 type PortalTab = 'overview' | 'quotes' | 'questionnaires' | 'contracts' | 'invoices' | 'reviews';
 
@@ -104,6 +105,68 @@ export default function ClientPortal() {
   const [hasConfirmedAgreement, setHasConfirmedAgreement] = useState(false);
   const [isFillingQuestionnaire, setIsFillingQuestionnaire] = useState(false);
   const [contractFingerprint, setContractFingerprint] = useState('');
+
+  const [showSetPassword, setShowSetPassword] = useState(false);
+  const [setPasswordValue, setSetPasswordValue] = useState('');
+  const [setPasswordConfirm, setSetPasswordConfirm] = useState('');
+  const [setPasswordLoading, setSetPasswordLoading] = useState(false);
+
+  useEffect(() => {
+    if (!portalClientId) {
+      setShowSetPassword(false);
+      return;
+    }
+    try {
+      const dismissed = window.localStorage.getItem(`omd:portal:setPasswordDismissed:${portalClientId}`) === 'true';
+      setShowSetPassword(!dismissed);
+    } catch {
+      setShowSetPassword(true);
+    }
+  }, [portalClientId]);
+
+  const handleSetPortalPassword = async () => {
+    if (!setPasswordValue || setPasswordValue.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+    if (setPasswordValue !== setPasswordConfirm) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    try {
+      setSetPasswordLoading(true);
+      const { error } = await supabase.auth.updateUser({ password: setPasswordValue });
+      if (error) throw error;
+      toast.success('Password set. You can use it next time you sign in.');
+      setSetPasswordValue('');
+      setSetPasswordConfirm('');
+      setShowSetPassword(false);
+      if (portalClientId) {
+        try {
+          window.localStorage.setItem(`omd:portal:setPasswordDismissed:${portalClientId}`, 'true');
+        } catch {
+          // ignore storage failures
+        }
+      }
+    } catch (error) {
+      console.error('Error setting portal password:', error);
+      const message = error instanceof Error ? error.message : 'Failed to set password';
+      toast.error(message);
+    } finally {
+      setSetPasswordLoading(false);
+    }
+  };
+
+  const handleDismissSetPassword = () => {
+    setShowSetPassword(false);
+    if (portalClientId) {
+      try {
+        window.localStorage.setItem(`omd:portal:setPasswordDismissed:${portalClientId}`, 'true');
+      } catch {
+        // ignore storage failures
+      }
+    }
+  };
 
   const clearQuoteContext = () => {
     setQuoteDetailContext(null);
@@ -926,6 +989,52 @@ export default function ClientPortal() {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Client Portal</h1>
         </div>
       </header>
+
+      {showSetPassword && (
+        <div className="bg-amber-50 border-y border-amber-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-amber-900">Set a password for future portal access</p>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  Your current link is one-time only. Create a password now so you can sign back in anytime with your email.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <input
+                  type="password"
+                  placeholder="New password"
+                  value={setPasswordValue}
+                  onChange={(e) => setSetPasswordValue(e.target.value)}
+                  className="px-3 py-2 text-sm border border-amber-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+                <input
+                  type="password"
+                  placeholder="Confirm password"
+                  value={setPasswordConfirm}
+                  onChange={(e) => setSetPasswordConfirm(e.target.value)}
+                  className="px-3 py-2 text-sm border border-amber-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleSetPortalPassword}
+                  disabled={setPasswordLoading}
+                  className="px-3 py-2 text-sm font-medium rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {setPasswordLoading ? 'Saving...' : 'Save password'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismissSetPassword}
+                  className="px-2 py-2 text-xs text-amber-800 hover:underline"
+                >
+                  Not now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="lg:grid lg:grid-cols-12 lg:gap-x-5">
